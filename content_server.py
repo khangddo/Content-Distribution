@@ -26,10 +26,51 @@ UPSTREAM_PORT_NUMBER = 1111 # socket number for UL transmission
 class Content_server():
     def __init__(self, conf_file_addr):
         # load and read configuration file
+        # ---------------------------------------------------------------------
+        self.uuid = ""
+        self.name = ""
+        self.backend_port = 0
+        self.peer_count = 0
+        self.peers = []
+        
+        with open(conf_file_addr, "r") as config_file:
+            print("file read:")
+            for line in config_file:
+                line = line.strip()
+                if line:
+                    if (line.split()[0] == 'uuid'):
+                        self.uuid = line.split()[2]
+                    elif (line.split()[0] == 'name'):
+                        self.name = line.split()[2]
+                    elif (line.split()[0] == 'backend_port'):
+                        backend_port= line.split()[2]  
+                        self.backend_port = int(backend_port)
+                    elif (line.split()[0] == 'peer_count'):
+                        peer_count = line.split()[2]  
+                        self.peer_count = int(peer_count)
+                    else:
+                        peer = {'uuid' : line.split()[2][:-1], 
+                                'name' : line.split()[3][:-1], 
+                                'backend_port' : line.split()[4][:-1], 
+                                'distance' : line.split()[5]}
+                        self.peers.append(peer)
+
+            print("uuid: " + self.uuid)
+            print("name: " + self.name)
+            print("backend_end: " + str(backend_port))
+            print("peer_count: " + str(self.peer_count))
+            for i in range(self.peer_count):
+                print("peer_" + str(i) + ": " + 
+                      self.peers[i]['uuid'] + ", " + 
+                      self.peers[i]['name'] + ", " + 
+                      str(self.peers[i]['backend_port']) + ", " + 
+                      str(self.peers[i]['distance']))
+        #======================================================================
+            
         # create the receive socket
         self.dl_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.dl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.dl_socket.bind(("", BACKEND PORT)) #YOU NEED TO READ THIS FROM CONFIGURATION FILE
+        self.dl_socket.bind(("", self.backend_port)) #YOU NEED TO READ THIS FROM CONFIGURATION FILE
         self.dl_socket.listen(100)
         # Create all the data structures to store various variables
         # Extract neighbor information and populate the initial variables
@@ -42,14 +83,16 @@ class Content_server():
         return
     def addneighbor(self, host, backend_port, metric):
         # Add neighbor code goes here
+        
         return
     def link_state_adv(self):
         while self.remain_threads:
-            ;
             # Perform Link State Advertisement to all your neighbors periodically
+            print(1)
         return
     def link_state_flood(self, send_time, host, msg):
         # If new information then send to all your neighbors, if old information then drop.
+
         return
     def dead_adv(self, peer):
         # Advertise death before kill
@@ -105,15 +148,21 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
+                print("alive")
             elif command == "uuid":
                 # Print UUID
+                print("{\"uuif\": \"" + str(self.uuid) + "\"}")
             elif command == "neighbors":
                 # Print Neighbor information
+                print("neighbors")
             elif command == "addneighbor":
                 # Update Neighbor List with new neighbor
+                 print(self.uuid)
             elif command == "map":
                 # Print Map
+                print(self.uuid)
             elif command == "rank":
                 # Compute and print the rank
+                print(self.uuid)
 if __name__ == "__main__":
     content_sever = Content_server(sys.argv[2])
