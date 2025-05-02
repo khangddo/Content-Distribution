@@ -50,21 +50,21 @@ class Content_server():
                         self.peer_count = int(peer_count)
                     else:
                         peer = {'uuid' : line.split()[2][:-1], 
-                                'name' : line.split()[3][:-1], 
+                                'ip_addr' : line.split()[3][:-1], 
                                 'backend_port' : line.split()[4][:-1], 
                                 'distance' : line.split()[5]}
                         self.peers.append(peer)
 
             print("uuid: " + self.uuid)
             print("name: " + self.name)
-            print("backend_end: " + str(backend_port))
+            print("backend_end: " + str(self.backend_port))
             print("peer_count: " + str(self.peer_count))
             for i in range(self.peer_count):
                 print("peer_" + str(i) + ": " + 
-                      self.peers[i]['uuid'] + ", " + 
-                      self.peers[i]['name'] + ", " + 
-                      str(self.peers[i]['backend_port']) + ", " + 
-                      str(self.peers[i]['distance']))
+                    self.peers[i]['uuid'] + ", " + 
+                    self.peers[i]['ip_addr'] + ", " + 
+                    str(self.peers[i]['backend_port']) + ", " + 
+                    str(self.peers[i]['distance']))
         #======================================================================
             
         # create the receive socket
@@ -72,26 +72,51 @@ class Content_server():
         self.dl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.dl_socket.bind(("", self.backend_port)) #YOU NEED TO READ THIS FROM CONFIGURATION FILE
         self.dl_socket.listen(100)
+
+        self.remain_threads = True
         # Create all the data structures to store various variables
+        map = {self.name:{}}
+        # a list of dictionary 
         # Extract neighbor information and populate the initial variables
         # Update the map
+
         # Initialize link state advertisement that repeats using a neighbor variable
         self.link_state_adv()
         # print("Initial setting complete")
-        self.remain_threads = True
+        print("Before alive function: ")
+
         self.alive()
         return
     def addneighbor(self, host, backend_port, metric):
         # Add neighbor code goes here
-        
+        #----------------------------------------------------------------------
+        # update map
         return
     def link_state_adv(self):
         while self.remain_threads:
-            # Perform Link State Advertisement to all your neighbors periodically
-            print(1)
+        # Perform Link State Advertisement to all your neighbors periodically
+        #----------------------------------------------------------------------
+        # send out a message to neighbors that this node is created
+        # making a giant string
+            for peer in self.peers:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as soc:
+                        soc.connect((peer['ip_addr'], int(peer['backend_port'])))
+                        message = "LSA: I'm alive!"
+                        soc.send(message.encode())
+                        # print("link_state_adv() SUCCESS!")
+                except Exception as e:
+                    print(f"link_state_adv, {e}")
+                    pass
+            
+            time.sleep(3)
+        #======================================================================
         return
     def link_state_flood(self, send_time, host, msg):
         # If new information then send to all your neighbors, if old information then drop.
+        #---------------------------------
+        # send out a message to neighbors that a new node is added
+        # 
 
         return
     def dead_adv(self, peer):
@@ -102,6 +127,8 @@ class Content_server():
         return
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
+        # 
+        
         return
     ## THIS IS THE RECEIVE FUNCTION THAT IS RECEIVING THE PACKETS
     def listen(self):
@@ -110,13 +137,15 @@ class Content_server():
             try:
                 connection_socket, client_address = self.dl_socket.accept()
                 msg_string = connection_socket.recv(BUFSIZE).decode()
-                # print("received", connection_socket, client_address, msg_string)
+                print("received", connection_socket, client_address, msg_string)
             except socket.timeout:
                 msg_string = ""
                 pass
             if msg_string == "": # empty message
                 pass
-            elif msg_string == "Alive message": # Update the timeout time if known node, otherwise add new neighbor
+            elif msg_string == "LSA: I'm alive!": # Update the timeout time if known node, otherwise add new neighbor
+                print("Hello?")
+                print(msg_string)
                 pass
             elif msg_string == "Link State Packet": # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
@@ -144,20 +173,25 @@ class Content_server():
             time.sleep(ALIVE_SGN_INTERVAL) # wait for the network to settle
             command_line = input().split(" ")
             command = command_line[0]
-            # print("Received command: ", command)
+            if len(command_line) > 1:
+                content = command_line[1:]
+            print("Received command: ", command)
             if command == "kill":
                 # Send death message
                 # Kill all threads
-                print("alive")
+                print("kill")
             elif command == "uuid":
                 # Print UUID
+                print("hello?")
                 print("{\"uuif\": \"" + str(self.uuid) + "\"}")
             elif command == "neighbors":
                 # Print Neighbor information
                 print("neighbors")
             elif command == "addneighbor":
                 # Update Neighbor List with new neighbor
-                 print(self.uuid)
+                # addneighbor(self, host, backend_port, metric)
+                # link_state_flood()
+                print(self.uuid)
             elif command == "map":
                 # Print Map
                 print(self.uuid)
