@@ -3,6 +3,8 @@ import ast
 import threading, time
 import random
 
+import uuid
+
 BUFSIZE = 1024 # size of receiving buffer
 ALIVE_SGN_INTERVAL = 0.5 # interval to send alive signal
 TIMEOUT_INTERVAL = 10*ALIVE_SGN_INTERVAL
@@ -32,7 +34,7 @@ class Content_server():
         self.backend_port = 0
         self.peer_count = 0
         self.peers = []
-        self.map = []
+        self.map = {}
         
         with open(conf_file_addr, "r") as config_file:
             print("file read:")
@@ -66,6 +68,10 @@ class Content_server():
                     self.peers[i]['ip_addr'] + ", " + 
                     str(self.peers[i]['backend_port']) + ", " + 
                     str(self.peers[i]['distance']))
+                
+        self.map["map"] = {self.name : {}}
+        for peer in self.peers:
+            self.map["map"][self.name][peer["uuid"]] = peer["distance"]
         #======================================================================
             
         # create the receive socket
@@ -88,6 +94,22 @@ class Content_server():
         # Add neighbor code goes here
         #----------------------------------------------------------------------
         # update map
+        peer_uuid = str(uuid.uuid4())
+        peer = {'uuid' : peer_uuid, 
+                'ip_addr' : host, 
+                'backend_port' : backend_port, 
+                'distance' : metric}
+        self.peers.append(peer)
+        print(self.peers)
+        print(self.map)
+
+        # try:
+        #     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #     soc.connect((host, int(backend_port)))
+        # except Exception as e:
+        #     print(f"link_state_adv, {e}")
+        #     pass
+        # self.link_state_flood()
         return
     def link_state_adv(self):
         while self.remain_threads:
@@ -100,12 +122,12 @@ class Content_server():
                 peer_host = peer['ip_addr']
                 peer_port = peer['backend_port']
                 peer_distance = peer['distance']
+                # send my name to other nodes
                 try:
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as soc:
-                        soc.connect((peer_host, int(peer_port)))
-                        message = "LSA: I'm alive!"
-                        soc.send(message.encode())
-                        # print("link_state_adv() SUCCESS!")
+                    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    soc.connect((peer_host, int(peer_port)))
+                    message = self.name + " " + self.uuid + " " 
+                    soc.send(message.encode())
                 except Exception as e:
                     print(f"link_state_adv, {e}")
                     pass
@@ -117,7 +139,7 @@ class Content_server():
         # If new information then send to all your neighbors, if old information then drop.
         #---------------------------------
         # send out a message to neighbors that a new node is added
-        # 
+        
 
         return
     def dead_adv(self, peer):
@@ -145,7 +167,7 @@ class Content_server():
             if msg_string == "": # empty message
                 pass
             elif msg_string == "LSA: I'm alive!": # Update the timeout time if known node, otherwise add new neighbor
-                print(msg_string)
+                # print(msg_string)
                 pass
             elif msg_string == "Link State Packet": # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
@@ -189,12 +211,12 @@ class Content_server():
                 print("neighbors")
             elif command == "addneighbor":
                 # Update Neighbor List with new neighbor
-                # addneighbor(self, host, backend_port, metric)
+                self.addneighbor(command_line[1], command_line[2], command_line[3])
                 # link_state_flood()
-                print(self.uuid)
+                print("add neighbor done")
             elif command == "map":
                 # Print Map
-                print(self.uuid)
+                print(self.map)
             elif command == "rank":
                 # Compute and print the rank
                 print(self.uuid)
