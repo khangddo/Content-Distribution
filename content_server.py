@@ -35,6 +35,7 @@ class Content_server():
         self.peer_count = 0
         self.peers = []
         self.map = {}
+        self.neighbors = {}
         
         with open(conf_file_addr, "r") as config_file:
             print("file read:")
@@ -101,7 +102,6 @@ class Content_server():
                 'distance' : metric}
         self.peers.append(peer)
         print(self.peers)
-        print(self.map)
 
         # try:
         #     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -126,7 +126,7 @@ class Content_server():
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer_host, int(peer_port)))
-                    message = self.name + " " + self.uuid + " " 
+                    message = "LSA! " + self.neighbors
                     soc.send(message.encode())
                 except Exception as e:
                     print(f"link_state_adv, {e}")
@@ -160,14 +160,15 @@ class Content_server():
             try:
                 connection_socket, client_address = self.dl_socket.accept()
                 msg_string = connection_socket.recv(BUFSIZE).decode()
-                # print("received", connection_socket, client_address, msg_string)
+                print("received", connection_socket, client_address, msg_string)
+                active_msg = msg_string.split()[0]
             except socket.timeout:
                 msg_string = ""
                 pass
             if msg_string == "": # empty message
                 pass
-            elif msg_string == "LSA: I'm alive!": # Update the timeout time if known node, otherwise add new neighbor
-                # print(msg_string)
+            elif active_msg == "LSA!": # Update the timeout time if known node, otherwise add new neighbor
+                
                 pass
             elif msg_string == "Link State Packet": # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
@@ -205,10 +206,10 @@ class Content_server():
                 print("Node is dead!")
             elif command == "uuid":
                 # Print UUID
-                print("{\"uuif\": \"" + str(self.uuid) + "\"}")
+                print("{\"uuid\": \"" + str(self.uuid) + "\"}")
             elif command == "neighbors":
                 # Print Neighbor information
-                print("neighbors")
+                print(self.neighbors)
             elif command == "addneighbor":
                 # Update Neighbor List with new neighbor
                 self.addneighbor(command_line[1], command_line[2], command_line[3])
