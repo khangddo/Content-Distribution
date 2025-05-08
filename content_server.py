@@ -35,7 +35,7 @@ class Content_server():
         self.peer_count = 0
         self.peers = []
         self.map = {}
-        self.neighbors = {}
+        self.neighbors = {"neighbors" : {}}
         
         with open(conf_file_addr, "r") as config_file:
             print("file read:")
@@ -95,14 +95,16 @@ class Content_server():
         # Add neighbor code goes here
         #----------------------------------------------------------------------
         # update map
-        peer_uuid = str(uuid.uuid4())
-        peer = {'uuid' : peer_uuid, 
+
+        peer = {'uuid' : self, 
                 'ip_addr' : host, 
-                'backend_port' : backend_port, 
-                'distance' : metric}
+                'backend_port' : int(backend_port), 
+                'distance' : int(metric)}
         self.peers.append(peer)
+        print("Inside neigbhor func")
         print(self.peers)
 
+        # print(self.peers)
         # try:
         #     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         #     soc.connect((host, int(backend_port)))
@@ -126,7 +128,7 @@ class Content_server():
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer_host, int(peer_port)))
-                    message = "LSA! " + self.neighbors
+                    message = "LSA! " + self.uuid + " " + self.name
                     soc.send(message.encode())
                 except Exception as e:
                     print(f"link_state_adv, {e}")
@@ -160,7 +162,7 @@ class Content_server():
             try:
                 connection_socket, client_address = self.dl_socket.accept()
                 msg_string = connection_socket.recv(BUFSIZE).decode()
-                print("received", connection_socket, client_address, msg_string)
+                # print("received", connection_socket, client_address, msg_string)
                 active_msg = msg_string.split()[0]
             except socket.timeout:
                 msg_string = ""
@@ -168,7 +170,10 @@ class Content_server():
             if msg_string == "": # empty message
                 pass
             elif active_msg == "LSA!": # Update the timeout time if known node, otherwise add new neighbor
-                
+
+                for peer in self.peers:
+                    if peer["uuid"] == msg_string.split()[1]:
+                        self.neighbors["neighbors"][msg_string.split()[2]] = peer
                 pass
             elif msg_string == "Link State Packet": # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
@@ -212,7 +217,8 @@ class Content_server():
                 print(self.neighbors)
             elif command == "addneighbor":
                 # Update Neighbor List with new neighbor
-                self.addneighbor(command_line[1], command_line[2], command_line[3])
+                print("add neighbor begin")
+                self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][8:])
                 # link_state_flood()
                 print("add neighbor done")
             elif command == "map":
