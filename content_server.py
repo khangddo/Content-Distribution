@@ -218,7 +218,7 @@ class Content_server():
                 print("Node is dead!")
             elif command == "uuid":
                 # Print UUID
-                print("{\"uuid\": \"" + str(self.uuid) + "\"}")
+                print("{\"uuid\":\"" + str(self.uuid) + "\"}")
             elif command == "neighbors":
                 # Print Neighbor information
                 neighbors = json.dumps(self.neighbors)
