@@ -209,7 +209,6 @@ class Content_server():
                         del self.neighbors['neighbors'][nb_name]
                         del self.map['map'][self.name][nb_name]
                 pass
-
             #----------------------------------
             elif msg_string.startswith("Neighbor!"):
                 msg, nb_peers, nb_name, nb_uuid, nb_host, nb_port, metric = msg_string.split("|", 6)
@@ -245,8 +244,8 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
-                self.dead_adv(self.peers)
                 self.remain_threads = False
+                self.dead_adv(self.peers)
                 self.dl_socket.close()
                 print("Node is dead!")
             elif command == "uuid":
