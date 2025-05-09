@@ -172,25 +172,14 @@ class Content_server():
                 pass
             elif msg_string.startswith("LSA!"): # Update the timeout time if known node, otherwise add new neighbor
                 msg, map, nb_name, nb_uuid = msg_string.split("|", 3)
-                print(nb_name + " is alive!")
-                print(self.peers)
+                # print(nb_name + " is alive!")
+                # print(self.peers)
                 for peer in self.peers:
                     if nb_uuid == peer['uuid']:
                         self.neighbors['neighbors'][nb_name] = peer
                 nb_nodes = list(self.neighbors['neighbors'].keys())
-                # if self.name not in self.map['map']:
-                #     self.map['map'][self.name] = {}
                 for node in nb_nodes:
                     self.map['map'][self.name][node] = self.neighbors['neighbors'][node]['metric']
-                
-                
-                # if msg_string.split()[1] not in self.map:
-                #     self.map['map'][self.name][msg_string.split()[1]] = msg_string.split()[2]
-                #     peer = {'uuid' : msg_string.split()[3], 
-                #             'host' : "127.0.0.1", 
-                #             'backend_port' : int(msg_string.split()[4]), 
-                #             'metric' : int(msg_string.split()[2])}
-                #     self.peers.append(peer)
 
             elif msg_string == "Link State Packet": # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
