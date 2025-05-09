@@ -96,14 +96,15 @@ class Content_server():
         # Add neighbor code goes here
         #----------------------------------------------------------------------
         # update map
-        peer = {'uuid' : uuid, 
-                'host' : host, 
-                'backend_port' : int(backend_port), 
-                'metric' : int(metric)}
-        self.peers.append(peer)
-        print("Inside neigbhor func")
-        print(self.peers)
-        self.link_state_flood(time.time(), host, peer['backend_port'], metric, "Neighbor!")
+        if any(peer['uuid'] == uuid for peer in self.peers):
+            peer = {'uuid' : uuid, 
+                    'host' : host, 
+                    'backend_port' : int(backend_port), 
+                    'metric' : int(metric)}
+            self.peers.append(peer)
+            print("Inside neigbhor func")
+            print(self.peers)
+            self.link_state_flood(time.time(), host, peer['backend_port'], metric, "Neighbor!")
         #======================================================================
         return
     def link_state_adv(self):
