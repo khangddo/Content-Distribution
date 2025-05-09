@@ -4,6 +4,7 @@ import threading, time
 import random
 
 import uuid
+import json
 
 BUFSIZE = 1024 # size of receiving buffer
 ALIVE_SGN_INTERVAL = 0.5 # interval to send alive signal
@@ -31,11 +32,11 @@ class Content_server():
         # ---------------------------------------------------------------------
         self.uuid = ""
         self.name = ""
+        self.host = ""
         self.backend_port = 0
         self.peer_count = 0
         self.peers = []
-        self.map = {}
-        self.neighbors = {"neighbors" : {}}
+        self.neighbors = {'neighbors': {}}
         
         with open(conf_file_addr, "r") as config_file:
             print("file read:")
@@ -54,11 +55,12 @@ class Content_server():
                         self.peer_count = int(peer_count)
                     else:
                         peer = {'uuid' : line.split()[2][:-1], 
-                                'ip_addr' : line.split()[3][:-1], 
+                                'host' : line.split()[3][:-1], 
                                 'backend_port' : line.split()[4][:-1], 
-                                'distance' : line.split()[5]}
+                                'metric' : line.split()[5]}
                         self.peers.append(peer)
-
+            self.map = {'map': {self.name : {}}}
+            # Print out node details
             print("uuid: " + self.uuid)
             print("name: " + self.name)
             print("backend_end: " + str(self.backend_port))
@@ -66,13 +68,11 @@ class Content_server():
             for i in range(self.peer_count):
                 print("peer_" + str(i) + ": " + 
                     self.peers[i]['uuid'] + ", " + 
-                    self.peers[i]['ip_addr'] + ", " + 
+                    self.peers[i]['host'] + ", " + 
                     str(self.peers[i]['backend_port']) + ", " + 
-                    str(self.peers[i]['distance']))
-                
-        self.map["map"] = {self.name : {}}
-        for peer in self.peers:
-            self.map["map"][self.name][peer["uuid"]] = peer["distance"]
+                    str(self.peers[i]['metric']))
+        
+        # create maps
         #======================================================================
             
         # create the receive socket
@@ -91,20 +91,17 @@ class Content_server():
         self.remain_threads = True
         self.alive()
         return
-    def addneighbor(self, host, backend_port, metric):
+    def addneighbor(self, uuid, host, backend_port, metric):
         # Add neighbor code goes here
         #----------------------------------------------------------------------
         # update map
-
-        peer = {'uuid' : self, 
-                'ip_addr' : host, 
+        peer = {'uuid' : uuid, 
+                'host' : host, 
                 'backend_port' : int(backend_port), 
-                'distance' : int(metric)}
+                'metric' : int(metric)}
         self.peers.append(peer)
         print("Inside neigbhor func")
         print(self.peers)
-
-        # print(self.peers)
         # try:
         #     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         #     soc.connect((host, int(backend_port)))
@@ -112,24 +109,28 @@ class Content_server():
         #     print(f"link_state_adv, {e}")
         #     pass
         # self.link_state_flood()
+        #======================================================================
         return
     def link_state_adv(self):
         while self.remain_threads:
         # Perform Link State Advertisement to all your neighbors periodically
         #----------------------------------------------------------------------
+        # 
         # send out a message to neighbors that this node is created
         # making a giant string
             for peer in self.peers:
                 peer_uuid = peer['uuid']
-                peer_host = peer['ip_addr']
+                peer_host = peer['host']
                 peer_port = peer['backend_port']
-                peer_distance = peer['distance']
+                peer_metric = peer['metric']
                 # send my name to other nodes
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer_host, int(peer_port)))
-                    message = "LSA! " + self.uuid + " " + self.name
+                    map = json.dumps(self.neighbors)
+                    message = f"LSA!|{map}|{self.name}|{self.uuid}"
                     soc.send(message.encode())
+                    soc.close()
                 except Exception as e:
                     print(f"link_state_adv, {e}")
                     pass
@@ -141,7 +142,7 @@ class Content_server():
         # If new information then send to all your neighbors, if old information then drop.
         #---------------------------------
         # send out a message to neighbors that a new node is added
-        
+        # send information to neighbors
 
         return
     def dead_adv(self, peer):
@@ -163,20 +164,35 @@ class Content_server():
                 connection_socket, client_address = self.dl_socket.accept()
                 msg_string = connection_socket.recv(BUFSIZE).decode()
                 # print("received", connection_socket, client_address, msg_string)
-                active_msg = msg_string.split()[0]
+
             except socket.timeout:
                 msg_string = ""
                 pass
             if msg_string == "": # empty message
                 pass
-            elif active_msg == "LSA!": # Update the timeout time if known node, otherwise add new neighbor
-
+            elif msg_string.startswith("LSA!"): # Update the timeout time if known node, otherwise add new neighbor
+                msg, map, nb_name, nb_uuid = msg_string.split("|", 3)
                 for peer in self.peers:
-                    if peer["uuid"] == msg_string.split()[1]:
-                        self.neighbors["neighbors"][msg_string.split()[2]] = peer
-                pass
+                    if nb_uuid == peer['uuid']:
+                        self.neighbors['neighbors'][nb_name] = peer
+                nb_nodes = list(self.neighbors['neighbors'].keys())
+                # if self.name not in self.map['map']:
+                #     self.map['map'][self.name] = {}
+                for node in nb_nodes:
+                    self.map['map'][self.name][node] = self.neighbors['neighbors'][node]['metric']
+                
+                
+                # if msg_string.split()[1] not in self.map:
+                #     self.map['map'][self.name][msg_string.split()[1]] = msg_string.split()[2]
+                #     peer = {'uuid' : msg_string.split()[3], 
+                #             'host' : "127.0.0.1", 
+                #             'backend_port' : int(msg_string.split()[4]), 
+                #             'metric' : int(msg_string.split()[2])}
+                #     self.peers.append(peer)
+
             elif msg_string == "Link State Packet": # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
+            #Link_state_flood()
                 pass
             elif msg_string == "Death message": # Delete the node if it sends the message before executing kill.
                 pass
@@ -214,16 +230,18 @@ class Content_server():
                 print("{\"uuid\": \"" + str(self.uuid) + "\"}")
             elif command == "neighbors":
                 # Print Neighbor information
-                print(self.neighbors)
+                neighbors = json.dumps(self.neighbors)
+                print(neighbors)
             elif command == "addneighbor":
                 # Update Neighbor List with new neighbor
                 print("add neighbor begin")
-                self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][8:])
+                self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][7:])
                 # link_state_flood()
                 print("add neighbor done")
             elif command == "map":
                 # Print Map
-                print(self.map)
+                map = json.dumps(self.map)
+                print(map)
             elif command == "rank":
                 # Compute and print the rank
                 print(self.uuid)
