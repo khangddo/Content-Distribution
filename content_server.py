@@ -148,8 +148,18 @@ class Content_server():
             print(f"link_state_flood, {e}")
             pass
         return
-    def dead_adv(self, peer):
+    def dead_adv(self, peers):
         # Advertise death before kill
+        for peer in peers:
+            try:
+                soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                soc.connect((peer['host'], int(peer['backend_port'])))
+                message = f"Bye!|{self.name}|{self.uuid}"
+                soc.send(message.encode())
+                soc.close()
+            except Exception as e:
+                print(f"dead_adv, {e}")
+                pass
         return
     def dead_flood(self, send_time, host, peer):
         # Forward the death message information to other peers
@@ -188,9 +198,17 @@ class Content_server():
             #If new information, also flood to other neighbors
             #Link_state_flood()
                 pass
-            elif msg_string == "Death message": # Delete the node if it sends the message before executing kill.
-                pass
+            elif msg_string.startswith("Bye!"): # Delete the node if it sends the message before executing kill.
             # otherwise the msg is dropped
+                msg, nb_name, nb_uuid = msg_string.split("|", 2)
+                for peer in self.peers:
+                    if nb_uuid in peer['uuid']:
+                        self.peers.remove(peer)
+                        print(self.peers)
+                    if nb_name in self.neighbors['neighbors']:
+                        del self.neighbors['neighbors'][nb_name]
+                        del self.map['map'][self.name][nb_name]
+                pass
 
             #----------------------------------
             elif msg_string.startswith("Neighbor!"):
@@ -227,6 +245,7 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
+                self.dead_adv(self.peers)
                 self.remain_threads = False
                 self.dl_socket.close()
                 print("Node is dead!")
