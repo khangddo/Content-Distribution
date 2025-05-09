@@ -172,6 +172,8 @@ class Content_server():
                 pass
             elif msg_string.startswith("LSA!"): # Update the timeout time if known node, otherwise add new neighbor
                 msg, map, nb_name, nb_uuid = msg_string.split("|", 3)
+                print(nb_name + " is alive!")
+                print(self.peers)
                 for peer in self.peers:
                     if nb_uuid == peer['uuid']:
                         self.neighbors['neighbors'][nb_name] = peer
