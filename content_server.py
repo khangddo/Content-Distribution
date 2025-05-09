@@ -5,6 +5,7 @@ import random
 
 import uuid
 import json
+import time
 
 BUFSIZE = 1024 # size of receiving buffer
 ALIVE_SGN_INTERVAL = 0.5 # interval to send alive signal
@@ -102,13 +103,7 @@ class Content_server():
         self.peers.append(peer)
         print("Inside neigbhor func")
         print(self.peers)
-        # try:
-        #     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        #     soc.connect((host, int(backend_port)))
-        # except Exception as e:
-        #     print(f"link_state_adv, {e}")
-        #     pass
-        # self.link_state_flood()
+        self.link_state_flood(time.time(), host, peer['backend_port'], metric, "Neighbor!")
         #======================================================================
         return
     def link_state_adv(self):
@@ -138,12 +133,20 @@ class Content_server():
             time.sleep(3)
         #======================================================================
         return
-    def link_state_flood(self, send_time, host, msg):
+    def link_state_flood(self, send_time, host, backend_port, metric, msg):
         # If new information then send to all your neighbors, if old information then drop.
         #---------------------------------
         # send out a message to neighbors that a new node is added
         # send information to neighbors
-
+        try:
+            soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            soc.connect((host, int(backend_port)))
+            peers = json.dumps(self.peers)
+            message = f"{msg}|{peers}|{self.name}|{self.uuid}|{self.host}|{self.backend_port}|{metric}"
+            soc.send(message.encode())
+        except Exception as e:
+            print(f"link_state_flood, {e}")
+            pass
         return
     def dead_adv(self, peer):
         # Advertise death before kill
@@ -188,6 +191,16 @@ class Content_server():
             elif msg_string == "Death message": # Delete the node if it sends the message before executing kill.
                 pass
             # otherwise the msg is dropped
+
+            #----------------------------------
+            elif msg_string.startswith("Neighbor!"):
+                msg, nb_peers, nb_name, nb_uuid, nb_host, nb_port, metric = msg_string.split("|", 6)
+                peer = {'uuid' : nb_uuid, 
+                        'host' : nb_host, 
+                        'backend_port' : int(nb_port), 
+                        'metric' : int(metric)}
+                self.peers.append(peer)
+
     def timeout_old(self):
         # drop the neighbors whose information is old
         print("a")
@@ -214,11 +227,12 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
-
+                self.remain_threads = False
+                self.dl_socket.close()
                 print("Node is dead!")
             elif command == "uuid":
                 # Print UUID
-                print("{\"uuid\":\"" + str(self.uuid) + "\"}")
+                print("{\"uuid\": \"" + str(self.uuid) + "\"}")
             elif command == "neighbors":
                 # Print Neighbor information
                 neighbors = json.dumps(self.neighbors)
@@ -226,7 +240,10 @@ class Content_server():
             elif command == "addneighbor":
                 # Update Neighbor List with new neighbor
                 print("add neighbor begin")
-                self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][7:])
+                try:
+                    self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][7:])
+                except Exception:
+                    continue
                 # link_state_flood()
                 print("add neighbor done")
             elif command == "map":
