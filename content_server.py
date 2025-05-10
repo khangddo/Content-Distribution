@@ -84,8 +84,8 @@ class Content_server():
             # Update the map
             # Initialize neighbor relationships
             for peer in self.peers:
-                self.map['map'][self.name][peer['name']] = peer['metric']
-                self.neighbors['neighbors'][peer['host']] = peer
+                self.map['map'][self.name][peer['uuid']] = peer['metric']
+                self.neighbors['neighbors'][peer['uuid']] = peer
             
                 # Print out node details
             print("uuid: " + self.uuid)
