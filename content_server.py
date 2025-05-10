@@ -39,9 +39,9 @@ class Content_server():
         self.peers = []
         self.neighbors = {'neighbors': {}}
 
-        self.link_state = {}
-        self.link_state_seq = {}
-        self.last_seen = {}
+        self.link_state = {} # stores complete network
+        self.link_state_seq = {} # trakcs LSA sequence numbers
+        self.last_seen = {} # neighbor tracking
         # self.lock = threading.Lock()
 
         self.remain_threads = True
@@ -70,12 +70,24 @@ class Content_server():
 
             # Initialize network map with entries
             self.map = {'map': {self.name : {}}}
+            self.link_state[self.name] = {}
+            self.link_state_seq[self.name] = 0
 
             # Update the map
             # Initialize neighbor relationships
             for peer in self.peers:
                 self.map['map'][self.name][peer['name']] = peer['metric']
                 self.neighbors['neighbors'][peer['host']] = peer
+            
+                # Print out node details
+            print("uuid: " + self.uuid)
+            print("name: " + self.name)
+            print("host: " + self.host)
+            print("backend_port: " + str(self.backend_port))
+            print("peer_count: " + str(self.peer_count))
+            for i in range(self.peer_count):
+                print(f"peer_{i}: {self.peers[i]['uuid']}, {self.peers[i]['host']}, "
+                    f"{self.peers[i]['backend_port']}, {self.peers[i]['metric']}")
 
         #======================================================================
             
