@@ -44,6 +44,10 @@ class Content_server():
         self.last_seen = {} # neighbor tracking
         # self.lock = threading.Lock()
 
+        # name tracking
+        self.uuid_to_name = {self.uuid: self.name}
+        self.name_to_uuid = {self.name: self.uuid}
+
         self.remain_threads = True
         
         # Extract neighbor information and populate the initial variables
@@ -72,6 +76,10 @@ class Content_server():
             self.map = {'map': {self.name : {}}}
             self.link_state[self.name] = {}
             self.link_state_seq[self.name] = 0
+
+            for peer in self.peers:
+                self.uuid_to_name[peer['uuid']] = None
+                self.map['map'][self.name][peer['uuid']] = peer['metric']
 
             # Update the map
             # Initialize neighbor relationships
@@ -124,40 +132,46 @@ class Content_server():
         # 
         # send out a message to neighbors that this node is created
         # making a giant string
+
+            my_neighbors = {}
+
+            for name, data in self.neighbors['neighbors'].items():
+                 if name in self.name_to_uuid:
+                    my_neighbors[name] = data['metric']
+
+            packet = {'name': self.name,
+                      'uuid': self.uuid,
+                      'seq': self.link_state_seq[self.name],
+                      'neighbors': my_neighbors}
+            self.link_state_seq[self.name] += 1
+
             for peer in self.peers:
-                peer_uuid = peer['uuid']
-                peer_host = peer['host']
-                peer_port = peer['backend_port']
-                peer_metric = peer['metric']
-                # send my name to other nodes
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    soc.connect((peer_host, int(peer_port)))
+                    soc.connect((peer['host'], int(peer['backend_port'])))
                     map = json.dumps(self.neighbors)
-                    message = f"LSA!|{map}|{self.name}|{self.uuid}"
+                    message = f"LSA!|"
                     soc.send(message.encode())
                     soc.close()
                 except Exception as e:
-                    print(f"link_state_adv, {e}")
+                    print(f"LSA send error to {peer['backend_port']}, {e}")
                     pass
             
             time.sleep(3)
         #======================================================================
         return
-    def link_state_flood(self, send_time, host, msg):
+    def link_state_flood(self, host, port, msg):
         # If new information then send to all your neighbors, if old information then drop.
         #---------------------------------
         # send out a message to neighbors that a new node is added
         # send information to neighbors
         try:
             soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            soc.connect((host, int(backend_port)))
-            peers = json.dumps(self.peers)
-            message = f"{msg}|{peers}|{self.name}|{self.uuid}|{self.host}|{self.backend_port}|{metric}"
-            soc.send(message.encode())
+            soc.connect((host, port))
+            soc.send(msg.encode())
+            soc.close()
         except Exception as e:
-            print(f"link_state_flood, {e}")
-            pass
+            print(f"Failed to flood to {host}:{port}, {e}")
         return
     def dead_adv(self, peers):
         # Advertise death before kill
@@ -206,15 +220,34 @@ class Content_server():
             elif msg_string.startswith("ALIVE"): # Update the timeout time if known node, otherwise add new neighbor
                 msg, nb_name, nb_uuid = msg_string.split("|", 2)
 
+                # update name mappings
+                self.uuid_to_name[nb_uuid] = nb_name
+                self.name_to_uuid[nb_name] = nb_uuid
+
                 for peer in self.peers:
                     if nb_uuid == peer['uuid']:
                         self.neighbors['neighbors'][nb_name] = peer
-                nb_nodes = list(self.neighbors['neighbors'].keys())
-                for node in nb_nodes:
-                    self.map['map'][self.name][node] = self.neighbors['neighbors'][node]['metric']
+                        # update map with name
+                        if nb_uuid in self.map['map'][self.name]:
+                            del self.map['map'][self.name][nb_uuid]
+                        self.map['map'][self.name][nb_name] = peer['metric']
 
             elif msg_string == "Link State Packet": # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
+                msg, packet = msg_string.split("|", 1)
+
+                if packet['uuid'] not in self.uuid_to_name:
+                    self.uuid_to_name[packet['uuid']] = packet['name']
+                    self.name_to_uuid[packet['name']] = packet['uuid']
+                
+                # update network map
+                self.link_state[packet['name']] = packet['neighbors']
+
+                # forward to other peers
+                for peer in self.peers:
+                    if peer['uuid'] != packet['uuid']:
+                        self.link_state_flood(peer['host'], peer['backend_port'], msg_string)
+
             #Link_state_flood()
                 pass
             elif msg_string.startswith("Bye!"): # Delete the node if it sends the message before executing kill.
