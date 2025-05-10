@@ -134,7 +134,7 @@ class Content_server():
             time.sleep(3)
         #======================================================================
         return
-    def link_state_flood(self, send_time, host, backend_port, metric, msg):
+    def link_state_flood(self, send_time, host, msg):
         # If new information then send to all your neighbors, if old information then drop.
         #---------------------------------
         # send out a message to neighbors that a new node is added
@@ -167,8 +167,17 @@ class Content_server():
         return
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
-        # 
-        
+        while self.remain_threads:
+            for peer in self.peers:
+                try:
+                    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    soc.connect((peer['host'], int(peer['backend_port'])))
+                    message = f"ALIVE|{self.name}|{self.uuid}"
+                    soc.send(message.encode())
+                    soc.close()
+                except Exception as e:
+                    print(f"Keep_alive(self) failed to {peer['name']}: {e}")
+            time.sleep(ALIVE_SGN_INTERVAL)
         return
     ## THIS IS THE RECEIVE FUNCTION THAT IS RECEIVING THE PACKETS
     def listen(self):
@@ -184,7 +193,7 @@ class Content_server():
                 pass
             if msg_string == "": # empty message
                 pass
-            elif msg_string.startswith("LSA!"): # Update the timeout time if known node, otherwise add new neighbor
+            elif msg_string.startswith("ALIVE"): # Update the timeout time if known node, otherwise add new neighbor
                 msg, map, nb_name, nb_uuid = msg_string.split("|", 3)
                 # print(nb_name + " is alive!")
                 # print(self.peers)
