@@ -232,7 +232,7 @@ class Content_server():
                             del self.map['map'][self.name][nb_uuid]
                         self.map['map'][self.name][nb_name] = peer['metric']
 
-            elif msg_string == "Link State Packet": # Update the map based on new information, drop if old information
+            elif msg_string == "LSA!": # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
                 msg, packet = msg_string.split("|", 1)
 
