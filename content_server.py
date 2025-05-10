@@ -38,9 +38,16 @@ class Content_server():
         self.peer_count = 0
         self.peers = []
         self.neighbors = {'neighbors': {}}
+
+        self.link_state = {}
+        self.link_state_seq = {}
+        self.last_seen = {}
+        # self.lock = threading.Lock()
+
+        self.remain_threads = True
         
+        # Extract neighbor information and populate the initial variables
         with open(conf_file_addr, "r") as config_file:
-            print("file read:")
             for line in config_file:
                 line = line.strip()
                 if line:
@@ -60,20 +67,16 @@ class Content_server():
                                 'backend_port' : line.split()[4][:-1], 
                                 'metric' : line.split()[5]}
                         self.peers.append(peer)
+
+            # Initialize network map with entries
             self.map = {'map': {self.name : {}}}
-            # Print out node details
-            print("uuid: " + self.uuid)
-            print("name: " + self.name)
-            print("backend_end: " + str(self.backend_port))
-            print("peer_count: " + str(self.peer_count))
-            for i in range(self.peer_count):
-                print("peer_" + str(i) + ": " + 
-                    self.peers[i]['uuid'] + ", " + 
-                    self.peers[i]['host'] + ", " + 
-                    str(self.peers[i]['backend_port']) + ", " + 
-                    str(self.peers[i]['metric']))
-        
-        # create maps
+
+            # Update the map
+            # Initialize neighbor relationships
+            for peer in self.peers:
+                self.map['map'][self.name][peer['name']] = peer['metric']
+                self.neighbors['neighbors'][peer['host']] = peer
+
         #======================================================================
             
         # create the receive socket
@@ -81,16 +84,11 @@ class Content_server():
         self.dl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.dl_socket.bind(("", self.backend_port)) #YOU NEED TO READ THIS FROM CONFIGURATION FILE
         self.dl_socket.listen(100)
-
-        # Create all the data structures to store various variables
-        # a list of dictionary 
         
-        # Extract neighbor information and populate the initial variables
-        # Update the map
         # Initialize link state advertisement that repeats using a neighbor variable
-        # print("Initial setting complete")
-        self.remain_threads = True
+        self.link_state_adv()
         self.alive()
+        print("Initial setting complete")
         return
     def addneighbor(self, uuid, host, backend_port, metric):
         # Add neighbor code goes here
@@ -194,9 +192,8 @@ class Content_server():
             if msg_string == "": # empty message
                 pass
             elif msg_string.startswith("ALIVE"): # Update the timeout time if known node, otherwise add new neighbor
-                msg, map, nb_name, nb_uuid = msg_string.split("|", 3)
-                # print(nb_name + " is alive!")
-                # print(self.peers)
+                msg, nb_name, nb_uuid = msg_string.split("|", 2)
+
                 for peer in self.peers:
                     if nb_uuid == peer['uuid']:
                         self.neighbors['neighbors'][nb_name] = peer
