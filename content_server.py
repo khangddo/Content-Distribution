@@ -114,10 +114,6 @@ class Content_server():
         backend_port = int(backend_port)
         metric = int(metric)
 
-        # Validate host
-        if host == 'localhost':
-            host = '10.0.0.162'
-
         # update map
         with self.lock:
             if any(peer['uuid'] == uuid for peer in self.peers):
@@ -215,7 +211,9 @@ class Content_server():
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
         while self.remain_threads:
+            print("look through peers")
             for peer in self.peers.copy():
+                print(f"{peer['host']} {peer['backend_port']}")
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.settimeout(2)
