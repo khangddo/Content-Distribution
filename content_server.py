@@ -135,6 +135,22 @@ class Content_server():
             msg = f"Neighbor!|{self.name}|{self.uuid}|{self.backend_port}|{metric}"
 
             self.link_state_flood(host, int(peer['backend_port']), msg)
+
+            if int(peer['backend_port']) == int(self.backend_port):
+                return
+            try:
+                soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                soc.settimeout(2)
+                try:
+                    soc.connect((host, int(peer['backend_port'])))
+                    soc.send(msg.encode())
+                    soc.shutdown(socket.SHUT_RDWR)
+                    soc.close()
+                except (socket.timeout, ConnectionRefusedError) as e:
+                    print(f"Failed to flood to {host}:{peer['backend_port']}, {e}")
+            except Exception as e:
+                print(f"Socket creatrion error: {e}")
+
             print("after sending message to new neighbor")
         #======================================================================
         return
@@ -171,29 +187,28 @@ class Content_server():
                 except Exception as e:
                     print(f"LSA send error to {peer['backend_port']}, {e}")
                     pass
-            
+            self.link_state_flood('0')
             time.sleep(3)
         #======================================================================
         return
-    def link_state_flood(self, host, port, msg):
+    def link_state_flood(self, new_uuid):
         # If new information then send to all your neighbors, if old information then drop.
         #---------------------------------
         # send out a message to neighbors that a new node is added
         # send information to neighbors
-        if int(port) == int(self.backend_port):
-            return
-        try:
-            soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            soc.settimeout(2)
-            try:
-                soc.connect((host, int(port)))
-                soc.send(msg.encode())
-                soc.shutdown(socket.SHUT_RDWR)
-                soc.close()
-            except (socket.timeout, ConnectionRefusedError) as e:
-                print(f"Failed to flood to {host}:{port}, {e}")
-        except Exception as e:
-            print(f"Socket creatrion error: {e}")
+        message = f"Map!|{json.dumps(self.map)}"
+        for peer in self.peers:
+            if peer['uuid'] != new_uuid:
+                try:
+                    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    soc.connect((peer['host'], int(peer['backend_port'])))
+                    #print(f"Flood message: {message} to {peer['uuid']}" )
+                    soc.send(message.encode())
+                    soc.shutdown(socket.SHUT_RDWR)
+                    soc.close()
+                except Exception as e:
+                    print(f"Flood send error to {peer['backend_port']}, {e}")
+                    pass
             
         return
     def dead_adv(self, peers):
@@ -216,15 +231,12 @@ class Content_server():
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
         while self.remain_threads:
-            print("look through peers")
             for peer in self.peers:
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.settimeout(2)
                     try:
-                        print(f"{peer['backend_port']}: {peer['host']}")
                         soc.connect((peer['host'], int(peer['backend_port'])))
-                        print("Successful connection")
                         message = f"ALIVE|{self.name}|{self.uuid}"
                         soc.send(message.encode())
                         soc.shutdown(socket.SHUT_RDWR)
@@ -335,6 +347,15 @@ class Content_server():
 
                 except Exception as e:
                     print(f"Error processing Neighbor message: {e}")
+
+            elif msg_string.startswith("Map!"):
+                msg, nb_map = msg_string.split("|", 1)
+                map = json.loads(nb_map)
+                #print(f"recieved map from neighbor {map}")
+                for node in map['map']:
+                    #print(f"node from recieved map: {map['map'][node]}")
+                    if node not in self.map['map']:
+                        self.map['map'][node] = map['map'][node]
             #----------------------------------
             
     def timeout_old(self):
