@@ -82,9 +82,9 @@ class Content_server():
 
             # Update the map
             # Initialize neighbor relationships
-            for peer in self.peers:
-                self.map['map'][self.name][peer['uuid']] = peer['metric']
-                self.neighbors['neighbors'][peer['uuid']] = peer
+            # for peer in self.peers:
+            #     self.map['map'][self.name][peer['uuid']] = peer['metric']
+            #     self.neighbors['neighbors'][peer['uuid']] = peer
             
                 # Print out node details
             print("uuid: " + self.uuid)
@@ -119,6 +119,7 @@ class Content_server():
             self.peers.append(peer)
             print("Inside neigbhor func")
             print(self.peers)
+
             self.link_state_flood(host, peer['backend_port'], metric, "Neighbor!")
         #======================================================================
         return
@@ -191,7 +192,6 @@ class Content_server():
         # Tell that you are alive to all your neighbors, periodically.
         while self.remain_threads:
             for peer in self.peers:
-                print(peer['host'])
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
@@ -229,7 +229,7 @@ class Content_server():
                         # update map with name
                         if nb_uuid in self.map['map'][self.name]:
                             del self.map['map'][self.name][nb_uuid]
-                        self.map['map'][self.name][nb_name] = peer['metric']
+                            self.map['map'][self.name][nb_name] = peer['metric']
                 self.last_seen[nb_name] = time.time()
 
             elif msg_string.startswith("LSA!"): # Update the map based on new information, drop if old information
@@ -291,7 +291,6 @@ class Content_server():
                 del self.neighbors['neighbors'][name]
                 if name in self.map['map'][self.name]:
                     del self.map['map'][self.name][name]
-                
             
             time.sleep(ALIVE_SGN_INTERVAL)
 
@@ -306,7 +305,7 @@ class Content_server():
         link_state_adv = threading.Thread(target=self.link_state_adv) # A thread that keeps doing link_state_adv
         keep_alive.start()
         listen.start()
-        # timeout_old.start()
+        #timeout_old.start()
         link_state_adv.start()
         while self.remain_threads:
             time.sleep(ALIVE_SGN_INTERVAL) # wait for the network to settle
