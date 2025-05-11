@@ -33,7 +33,6 @@ class Content_server():
         # ---------------------------------------------------------------------
         self.uuid = ""
         self.name = ""
-        self.host = ""
         self.backend_port = 0
         self.peer_count = 0
         self.peers = []
@@ -42,7 +41,7 @@ class Content_server():
         self.link_state = {} # stores complete network
         self.link_state_seq = {} # trakcs LSA sequence numbers
         self.last_seen = {} # neighbor tracking
-        # self.lock = threading.Lock()
+        self.lock = threading.Lock()
 
         # name tracking
         self.uuid_to_name = {self.uuid: self.name}
@@ -90,7 +89,6 @@ class Content_server():
                 # Print out node details
             print("uuid: " + self.uuid)
             print("name: " + self.name)
-            print("host: " + self.host)
             print("backend_port: " + str(self.backend_port))
             print("peer_count: " + str(self.peer_count))
             for i in range(self.peer_count):
@@ -106,7 +104,6 @@ class Content_server():
         self.dl_socket.listen(100)
         
         # Initialize link state advertisement that repeats using a neighbor variable
-        self.link_state_adv()
         self.alive()
         print("Initial setting complete")
         return
@@ -114,7 +111,7 @@ class Content_server():
         # Add neighbor code goes here
         #----------------------------------------------------------------------
         # update map
-        if any(peer['uuid'] == uuid for peer in self.peers):
+        if not any(peer['uuid'] == uuid for peer in self.peers):
             peer = {'uuid' : uuid, 
                     'host' : host, 
                     'backend_port' : int(backend_port), 
@@ -122,7 +119,7 @@ class Content_server():
             self.peers.append(peer)
             print("Inside neigbhor func")
             print(self.peers)
-            self.link_state_flood(time.time(), host, peer['backend_port'], metric, "Neighbor!")
+            self.link_state_flood(host, peer['backend_port'], metric, "Neighbor!")
         #======================================================================
         return
     def link_state_adv(self):
@@ -135,22 +132,23 @@ class Content_server():
 
             my_neighbors = {}
 
-            for name, data in self.neighbors['neighbors'].items():
-                 if name in self.name_to_uuid:
-                    my_neighbors[name] = data['metric']
+            for uuid, data in self.neighbors['neighbors'].items():
+                name = self.uuid_to_name.get(uuid, uuid)
+                my_neighbors[name] = data['metric']
 
             packet = {'name': self.name,
                       'uuid': self.uuid,
                       'seq': self.link_state_seq[self.name],
                       'neighbors': my_neighbors}
+            
             self.link_state_seq[self.name] += 1
+
+            message = f"LSA!|{json.dumps(packet)}"
 
             for peer in self.peers:
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
-                    map = json.dumps(self.neighbors)
-                    message = f"LSA!|"
                     soc.send(message.encode())
                     soc.close()
                 except Exception as e:
@@ -167,7 +165,7 @@ class Content_server():
         # send information to neighbors
         try:
             soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            soc.connect((host, port))
+            soc.connect((host, int(port)))
             soc.send(msg.encode())
             soc.close()
         except Exception as e:
@@ -200,7 +198,7 @@ class Content_server():
                     soc.send(message.encode())
                     soc.close()
                 except Exception as e:
-                    print(f"Keep_alive(self) failed to {peer['name']}: {e}")
+                    print(f"Keep_alive(self) failed to {peer['backend_port']}: {e}")
             time.sleep(ALIVE_SGN_INTERVAL)
         return
     ## THIS IS THE RECEIVE FUNCTION THAT IS RECEIVING THE PACKETS
@@ -231,48 +229,71 @@ class Content_server():
                         if nb_uuid in self.map['map'][self.name]:
                             del self.map['map'][self.name][nb_uuid]
                         self.map['map'][self.name][nb_name] = peer['metric']
+                self.last_seen[nb_name] = time.time()
 
-            elif msg_string == "LSA!": # Update the map based on new information, drop if old information
+            elif msg_string.startswith("LSA!"): # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
                 msg, packet = msg_string.split("|", 1)
+                packet = json.loads(packet)
 
                 if packet['uuid'] not in self.uuid_to_name:
                     self.uuid_to_name[packet['uuid']] = packet['name']
                     self.name_to_uuid[packet['name']] = packet['uuid']
                 
-                # update network map
-                self.link_state[packet['name']] = packet['neighbors']
+                # update map structure
+                if packet['name'] not in self.map['map']:
+                    self.map['map'][packet['name']] = {}
 
-                # forward to other peers
+                # update neighbors in map
+                for nb_name, metric in packet['neighbors'].items():
+                    self.map['map'][packet['name']][nb_name] = metric
+
+                # forward to other peers (flooding)
                 for peer in self.peers:
                     if peer['uuid'] != packet['uuid']:
                         self.link_state_flood(peer['host'], peer['backend_port'], msg_string)
-
-            #Link_state_flood()
                 pass
             elif msg_string.startswith("Bye!"): # Delete the node if it sends the message before executing kill.
             # otherwise the msg is dropped
                 msg, nb_name, nb_uuid = msg_string.split("|", 2)
+                # remove from peers
+                new_peers = []
                 for peer in self.peers:
-                    if nb_uuid in peer['uuid']:
-                        self.peers.remove(peer)
-                        print(self.peers)
-                    if nb_name in self.neighbors['neighbors']:
-                        del self.neighbors['neighbors'][nb_name]
-                        del self.map['map'][self.name][nb_name]
+                    if peer['uuid'] != nb_uuid:
+                        new_peers.append(peer)
+                self.peers = new_peers
+
+                # remove form neighbors and map
+                if nb_name in self.neighbors['neighbors']:
+                    del self.neighbors['neighbors'][nb_name]
+                if nb_name in self.map['map']:
+                    del self.map['map'][nb_name]
+
+                for node in self.map['map']:
+                    if nb_name in self.map['map'][node]:
+                        del self.map['map'][node][nb_name]
                 pass
             #----------------------------------
-            elif msg_string.startswith("Neighbor!"):
-                msg, nb_peers, nb_name, nb_uuid, nb_host, nb_port, metric = msg_string.split("|", 6)
-                peer = {'uuid' : nb_uuid, 
-                        'host' : nb_host, 
-                        'backend_port' : int(nb_port), 
-                        'metric' : int(metric)}
-                self.peers.append(peer)
 
     def timeout_old(self):
         # drop the neighbors whose information is old
-        print("a")
+        while self.remain_threads:
+            rn = time.time()
+            remove_list = []
+            for name, peer in self.neighbors['neighbors'].items():
+                l = self.last_seen.get(name, 0)
+                if rn - l > TIMEOUT_INTERVAL:
+                    remove_list.append(name)
+                    self.peers.remove(peer)
+            for name in remove_list:
+                print(f"Timeout: removing neighbor {name}")
+                del self.neighbors['neighbors'][name]
+                if name in self.map['map'][self.name]:
+                    del self.map['map'][self.name][name]
+                
+            
+        time.sleep(ALIVE_SGN_INTERVAL)
+
     def shortest_path(self):
         # derive the shortest path according to the current link state
         rank = {}
@@ -284,7 +305,7 @@ class Content_server():
         link_state_adv = threading.Thread(target=self.link_state_adv) # A thread that keeps doing link_state_adv
         keep_alive.start()
         listen.start()
-        timeout_old.start()
+        # timeout_old.start()
         link_state_adv.start()
         while self.remain_threads:
             time.sleep(ALIVE_SGN_INTERVAL) # wait for the network to settle
@@ -296,8 +317,9 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
-                self.remain_threads = False
+                print("Shutting down...")
                 self.dead_adv(self.peers)
+                self.remain_threads = False
                 self.dl_socket.close()
                 print("Node is dead!")
             elif command == "uuid":
@@ -318,7 +340,13 @@ class Content_server():
                 print("add neighbor done")
             elif command == "map":
                 # Print Map
-                map = json.dumps(self.map)
+                map_print = {'map':{}}
+                for node, neighbors in self.map['map'].items():
+                    map_print['map'][node] = {}
+                    for neighbor, metric in neighbors.items():
+                        name = self.uuid_to_name.get(neighbor, neighbor)
+                        map_print['map'][node][name] = metric
+                map = json.dumps(map_print)
                 print(map)
             elif command == "rank":
                 # Compute and print the rank
