@@ -110,6 +110,10 @@ class Content_server():
     def addneighbor(self, uuid, host, backend_port, metric):
         # Add neighbor code goes here
         #----------------------------------------------------------------------
+        # Validate host
+        if host == 'localhost':
+            host = '127.0.0.1'
+
         # update map
         if not any(peer['uuid'] == uuid for peer in self.peers):
             peer = {'uuid' : uuid, 
@@ -122,9 +126,12 @@ class Content_server():
             self.neighbors['neighbors'][uuid] = peer
             self.uuid_to_name[uuid] = None
 
-            msg = f"Neighbors!|{self.name}|{self.uuid}|{self.backend_port}|{metric}"
+            print("before sending message to new neighbor")
+
+            msg = f"Neighbor!|{self.name}|{self.uuid}|{self.backend_port}|{metric}"
 
             self.link_state_flood(host, peer['backend_port'], msg)
+            print("after sending message to new neighbor")
         #======================================================================
         return
     def link_state_adv(self):
@@ -170,12 +177,16 @@ class Content_server():
         # send information to neighbors
         try:
             soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            soc.connect((host, int(port)))
-            soc.send(msg.encode())
-            soc.close()
+            soc.settimeout(2)
+            try:
+                soc.connect((host, int(port)))
+                soc.send(msg.encode())
+            except (socket.timeout, ConnectionRefusedError) as e:
+                print(f"Failed to flood to {host}:{port}, {e}")
         except Exception as e:
-            print(f"Failed to flood to {host}:{port}, {e}")
-        return
+            print(f"Socket creatrion error: {e}")
+            
+        # return
     def dead_adv(self, peers):
         # Advertise death before kill
         for peer in peers:
@@ -195,15 +206,21 @@ class Content_server():
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
         while self.remain_threads:
-            for peer in self.peers:
+            for peer in self.peers.copy():
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    soc.connect((peer['host'], int(peer['backend_port'])))
-                    message = f"ALIVE|{self.name}|{self.uuid}"
-                    soc.send(message.encode())
-                    soc.close()
+                    soc.settimeout(2)
+                    try:
+                        soc.connect((peer['host'], int(peer['backend_port'])))
+                        message = f"ALIVE|{self.name}|{self.uuid}"
+                        soc.send(message.encode())
+                    except (socket.timeout, ConnectionRefusedError) as e:
+                        print(f"Keep_alive(self) failed to {peer['backend_port']} {peer['host']}: {e}")
+                    except Exception as e:
+                        print(f"Unexpected keep_alive error: {e}")
+                    # soc.close()
                 except Exception as e:
-                    print(f"Keep_alive(self) failed to {peer['backend_port']}: {e}")
+                    print(f"Socket creation error in keep_alive: {e}")
             time.sleep(ALIVE_SGN_INTERVAL)
         return
     ## THIS IS THE RECEIVE FUNCTION THAT IS RECEIVING THE PACKETS
@@ -279,17 +296,30 @@ class Content_server():
                         del self.map['map'][node][nb_name]
                 pass
 
-            elif msg_string.startswith('Neighbor!'):
-                msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
+            elif msg_string.startswith("Neighbor!"):
+                try:
+                    print("New neighbor!")
+                    msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
 
-                peer = {'uuid' : nb_uuid, 
-                        'host' : '127.0.0.1', 
-                        'backend_port' : int(nb_port), 
-                        'metric' : int(nb_metric)}
-                self.peers.append(peer)
+                    nb_host = client_address[0]
 
-                self.map['map'][self.name][nb_name] = metric
-                self.neighbors['neighbors'][nb_name] = peer
+                    peer = {'uuid' : nb_uuid, 
+                            'host' : nb_host, 
+                            'backend_port' : int(nb_port), 
+                            'metric' : int(nb_metric)}
+                    
+                    with self.lock:
+                        self.peers = [p for p in self.peers if p['uuid'] != nb_uuid]
+                        self.peers.append(peer)
+                        self.map['map'][self.name][nb_name] = peer['metric']
+                        self.neighbors['neighbors'][nb_name] = peer
+                        self.uuid_to_name[nb_uuid] = nb_name
+                        self.name_to_uuid[nb_name] = nb_uuid
+            
+                        print(f"Added neighbor: {nb_name} ({nb_uuid}) at {nb_host}:{nb_port}")
+
+                except Exception as e:
+                    print(f"Error processing Neighbor message: {e}")
             #----------------------------------
             
 
@@ -350,10 +380,11 @@ class Content_server():
                 # Update Neighbor List with new neighbor
                 print("add neighbor begin")
                 try:
+                    print("in")
                     self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][7:])
-                except Exception:
-                    continue
-                # link_state_flood()
+                    print("out")
+                except Exception as e:
+                    print(f"{e}")
                 print("add neighbor done")
             elif command == "map":
                 # Print Map
