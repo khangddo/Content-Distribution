@@ -117,10 +117,14 @@ class Content_server():
                     'backend_port' : int(backend_port), 
                     'metric' : int(metric)}
             self.peers.append(peer)
-            print("Inside neigbhor func")
-            print(self.peers)
 
-            self.link_state_flood(host, peer['backend_port'], metric, "Neighbor!")
+            self.map['map'][self.name][uuid] = int(metric)
+            self.neighbors['neighbors'][uuid] = peer
+            self.uuid_to_name[uuid] = None
+
+            msg = f"Neighbors!|{self.name}|{self.uuid}|{self.backend_port}|{metric}"
+
+            self.link_state_flood(host, peer['backend_port'], msg)
         #======================================================================
         return
     def link_state_adv(self):
@@ -274,7 +278,20 @@ class Content_server():
                     if nb_name in self.map['map'][node]:
                         del self.map['map'][node][nb_name]
                 pass
+
+            elif msg_string.startswith('Neighbor!'):
+                msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
+
+                peer = {'uuid' : nb_uuid, 
+                        'host' : '127.0.0.1', 
+                        'backend_port' : int(nb_port), 
+                        'metric' : int(nb_metric)}
+                self.peers.append(peer)
+
+                self.map['map'][self.name][nb_name] = metric
+                self.neighbors['neighbors'][nb_name] = peer
             #----------------------------------
+            
 
     def timeout_old(self):
         # drop the neighbors whose information is old
