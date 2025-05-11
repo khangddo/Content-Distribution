@@ -67,8 +67,8 @@ class Content_server():
                     else:
                         peer = {'uuid' : line.split()[2][:-1], 
                                 'host' : line.split()[3][:-1], 
-                                'backend_port' : line.split()[4][:-1], 
-                                'metric' : line.split()[5]}
+                                'backend_port' : int(line.split()[4][:-1]), 
+                                'metric' : int(line.split()[5])}
                         self.peers.append(peer)
 
             # Initialize network map with entries
@@ -110,23 +110,31 @@ class Content_server():
     def addneighbor(self, uuid, host, backend_port, metric):
         # Add neighbor code goes here
         #----------------------------------------------------------------------
+        # Convert and validate inputs
+        backend_port = int(backend_port)
+        metric = int(metric)
+
         # Validate host
         if host == 'localhost':
             host = '127.0.0.1'
 
         # update map
-        if not any(peer['uuid'] == uuid for peer in self.peers):
+        with self.lock:
+            if any(peer['uuid'] == uuid for peer in self.peers):
+                print(f"Already neighbor")
+                return
+            
             peer = {'uuid' : uuid, 
                     'host' : host, 
-                    'backend_port' : int(backend_port), 
-                    'metric' : int(metric)}
+                    'backend_port' : backend_port, 
+                    'metric' : metric}
+            
             self.peers.append(peer)
-
-            self.map['map'][self.name][uuid] = int(metric)
+            self.map['map'][self.name][uuid] = metric
             self.neighbors['neighbors'][uuid] = peer
             self.uuid_to_name[uuid] = None
 
-            print("before sending message to new neighbor")
+            print(f"Adding neighbor {uuid} at {host}:{backend_port}")
 
             msg = f"Neighbor!|{self.name}|{self.uuid}|{self.backend_port}|{metric}"
 
@@ -386,6 +394,9 @@ class Content_server():
                 except Exception as e:
                     print(f"{e}")
                 print("add neighbor done")
+                print(self.peers)
+                print(self.neighbors)
+                print(self.map)
             elif command == "map":
                 # Print Map
                 map_print = {'map':{}}
