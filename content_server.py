@@ -191,6 +191,7 @@ class Content_server():
         # Tell that you are alive to all your neighbors, periodically.
         while self.remain_threads:
             for peer in self.peers:
+                print(peer['host'])
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
@@ -292,7 +293,7 @@ class Content_server():
                     del self.map['map'][self.name][name]
                 
             
-        time.sleep(ALIVE_SGN_INTERVAL)
+            time.sleep(ALIVE_SGN_INTERVAL)
 
     def shortest_path(self):
         # derive the shortest path according to the current link state
