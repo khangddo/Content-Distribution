@@ -352,10 +352,14 @@ class Content_server():
                 msg, nb_map = msg_string.split("|", 1)
                 map = json.loads(nb_map)
                 #print(f"recieved map from neighbor {map}")
-                for node in map['map']:
+                for node, neighbors in map['map'].items():
                     #print(f"node from recieved map: {map['map'][node]}")
-                    if node not in self.map['map']:
-                        self.map['map'][node] = map['map'][node]
+                    if node not in self.neighbors['neighbors']:
+                        if node in self.map['map'] and self.map['map'][node] != neighbors:
+                            del self.map['map'][node]
+
+                        if node not in self.map['map']:
+                            self.map['map'][node] = map['map'][node]
             #----------------------------------
             
     def timeout_old(self):
