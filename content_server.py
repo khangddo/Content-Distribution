@@ -116,7 +116,7 @@ class Content_server():
 
         # Validate host
         if host == 'localhost':
-            host = '127.0.0.1'
+            host = '10.0.0.162'
 
         # update map
         with self.lock:
@@ -138,7 +138,7 @@ class Content_server():
 
             msg = f"Neighbor!|{self.name}|{self.uuid}|{self.backend_port}|{metric}"
 
-            self.link_state_flood(host, peer['backend_port'], msg)
+            self.link_state_flood(host, int(peer['backend_port']), msg)
             print("after sending message to new neighbor")
         #======================================================================
         return
@@ -189,6 +189,7 @@ class Content_server():
             try:
                 soc.connect((host, int(port)))
                 soc.send(msg.encode())
+                soc.close()
             except (socket.timeout, ConnectionRefusedError) as e:
                 print(f"Failed to flood to {host}:{port}, {e}")
         except Exception as e:
@@ -222,6 +223,7 @@ class Content_server():
                         soc.connect((peer['host'], int(peer['backend_port'])))
                         message = f"ALIVE|{self.name}|{self.uuid}"
                         soc.send(message.encode())
+                        soc.close()
                     except (socket.timeout, ConnectionRefusedError) as e:
                         print(f"Keep_alive(self) failed to {peer['backend_port']} {peer['host']}: {e}")
                     except Exception as e:
@@ -281,7 +283,7 @@ class Content_server():
                 # forward to other peers (flooding)
                 for peer in self.peers:
                     if peer['uuid'] != packet['uuid']:
-                        self.link_state_flood(peer['host'], peer['backend_port'], msg_string)
+                        self.link_state_flood(peer['host'], int(peer['backend_port']), msg_string)
                 pass
             elif msg_string.startswith("Bye!"): # Delete the node if it sends the message before executing kill.
             # otherwise the msg is dropped
@@ -330,7 +332,6 @@ class Content_server():
                     print(f"Error processing Neighbor message: {e}")
             #----------------------------------
             
-
     def timeout_old(self):
         # drop the neighbors whose information is old
         while self.remain_threads:
@@ -389,6 +390,7 @@ class Content_server():
                 print("add neighbor begin")
                 try:
                     print("in")
+                    print(command_line[2][5:])
                     self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][7:])
                     print("out")
                 except Exception as e:
