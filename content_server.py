@@ -100,7 +100,7 @@ class Content_server():
         # create the receive socket
         self.dl_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.dl_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.dl_socket.bind(("", self.backend_port)) #YOU NEED TO READ THIS FROM CONFIGURATION FILE
+        self.dl_socket.bind(('', self.backend_port)) #YOU NEED TO READ THIS FROM CONFIGURATION FILE
         self.dl_socket.listen(100)
         
         # Initialize link state advertisement that repeats using a neighbor variable
@@ -166,6 +166,7 @@ class Content_server():
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
                     soc.send(message.encode())
+                    soc.shutdown(socket.SHUT_RDWR)
                     soc.close()
                 except Exception as e:
                     print(f"LSA send error to {peer['backend_port']}, {e}")
@@ -185,6 +186,7 @@ class Content_server():
             try:
                 soc.connect((host, int(port)))
                 soc.send(msg.encode())
+                soc.shutdown(socket.SHUT_RDWR)
                 soc.close()
             except (socket.timeout, ConnectionRefusedError) as e:
                 print(f"Failed to flood to {host}:{port}, {e}")
@@ -200,6 +202,7 @@ class Content_server():
                 soc.connect((peer['host'], int(peer['backend_port'])))
                 message = f"Bye!|{self.name}|{self.uuid}"
                 soc.send(message.encode())
+                soc.shutdown(socket.SHUT_RDWR)
                 soc.close()
             except Exception as e:
                 print(f"dead_adv, {e}")
@@ -212,7 +215,7 @@ class Content_server():
         # Tell that you are alive to all your neighbors, periodically.
         while self.remain_threads:
             print("look through peers")
-            for peer in self.peers.copy():
+            for peer in self.peers:
                 print(f"{peer['host']} {peer['backend_port']}")
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -221,6 +224,7 @@ class Content_server():
                         soc.connect((peer['host'], int(peer['backend_port'])))
                         message = f"ALIVE|{self.name}|{self.uuid}"
                         soc.send(message.encode())
+                        soc.shutdown(socket.SHUT_RDWR)
                         soc.close()
                     except (socket.timeout, ConnectionRefusedError) as e:
                         print(f"Keep_alive(self) failed to {peer['backend_port']} {peer['host']}: {e}")
