@@ -134,7 +134,7 @@ class Content_server():
 
             msg = f"Neighbor!|{self.name}|{self.uuid}|{self.backend_port}|{metric}"
 
-            self.link_state_flood(host, int(peer['backend_port']), msg)
+            # self.link_state_flood(host, int(peer['backend_port']), msg)
 
             if int(peer['backend_port']) == int(self.backend_port):
                 return
@@ -329,6 +329,8 @@ class Content_server():
                     msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
 
                     nb_host = client_address[0]
+                
+                    self.map['map'][self.name] = {[nb_name]: peer['metric']}
 
                     peer = {'uuid' : nb_uuid, 
                             'host' : nb_host, 
@@ -338,7 +340,7 @@ class Content_server():
                     with self.lock:
                         self.peers = [p for p in self.peers if p['uuid'] != nb_uuid]
                         self.peers.append(peer)
-                        self.map['map'][self.name][nb_name] = peer['metric']
+                        
                         self.neighbors['neighbors'][nb_name] = peer
                         self.uuid_to_name[nb_uuid] = nb_name
                         self.name_to_uuid[nb_name] = nb_uuid
