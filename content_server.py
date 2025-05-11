@@ -180,6 +180,8 @@ class Content_server():
         #---------------------------------
         # send out a message to neighbors that a new node is added
         # send information to neighbors
+        if int(port) == int(self.backend_port):
+            return
         try:
             soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             soc.settimeout(2)
@@ -193,7 +195,7 @@ class Content_server():
         except Exception as e:
             print(f"Socket creatrion error: {e}")
             
-        # return
+        return
     def dead_adv(self, peers):
         # Advertise death before kill
         for peer in peers:
@@ -216,12 +218,13 @@ class Content_server():
         while self.remain_threads:
             print("look through peers")
             for peer in self.peers:
-                print(f"{peer['host']} {peer['backend_port']}")
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.settimeout(2)
                     try:
+                        print(f"{peer['backend_port']}: {peer['host']}")
                         soc.connect((peer['host'], int(peer['backend_port'])))
+                        print("Successful connection")
                         message = f"ALIVE|{self.name}|{self.uuid}"
                         soc.send(message.encode())
                         soc.shutdown(socket.SHUT_RDWR)
@@ -283,10 +286,10 @@ class Content_server():
                     self.map['map'][packet['name']][nb_name] = metric
 
                 # forward to other peers (flooding)
-                for peer in self.peers:
-                    if peer['uuid'] != packet['uuid']:
-                        self.link_state_flood(peer['host'], int(peer['backend_port']), msg_string)
-                pass
+                # for peer in self.peers:
+                #     if peer['uuid'] != packet['uuid']:
+                #         self.link_state_flood(peer['host'], int(peer['backend_port']), msg_string)
+                # pass
             elif msg_string.startswith("Bye!"): # Delete the node if it sends the message before executing kill.
             # otherwise the msg is dropped
                 msg, nb_name, nb_uuid = msg_string.split("|", 2)
