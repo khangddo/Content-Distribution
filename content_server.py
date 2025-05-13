@@ -292,6 +292,11 @@ class Content_server():
                     self.map['map'][packet['name']] = {}
 
                 # update neighbors in map
+                if packet['uuid'] in self.neighbors['neighbors']:
+                    peer_info = self.neighbors['neighbors'][packet['uuid']]
+                    del self.neighbors['neighbors'][packet['uuid']]
+                    self.neighbors['neighbors'][packet['name']] = peer_info
+
                 for nb_name, metric in packet['neighbors'].items():
                     self.map['map'][packet['name']][nb_name] = metric
 
