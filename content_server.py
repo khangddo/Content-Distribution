@@ -35,17 +35,17 @@ class Content_server():
         self.name = ""
         self.backend_port = 0
         self.peer_count = 0
+
         self.peers = []
         self.neighbors = {'neighbors': {}}
+        # name tracking
+        self.uuid_to_name = {self.uuid: self.name}
+        self.name_to_uuid = {self.name: self.uuid}
 
         self.link_state = {} # stores complete network
         self.link_state_seq = {} # trakcs LSA sequence numbers
         self.last_seen = {} # neighbor tracking
         self.lock = threading.Lock()
-
-        # name tracking
-        self.uuid_to_name = {self.uuid: self.name}
-        self.name_to_uuid = {self.name: self.uuid}
 
         self.remain_threads = True
         
@@ -133,6 +133,10 @@ class Content_server():
                 soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 soc.connect((host, int(peer['backend_port'])))
                 soc.send(msg.encode())
+                # **
+                soc.shutdown(socket.SHUT_RDWR)
+                soc.close()
+                # **
             except Exception as e:
                 print(f"Socket creatrion error: {e}")
             
@@ -169,6 +173,10 @@ class Content_server():
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
                     soc.send(message.encode())
+                    # **
+                    soc.shutdown(socket.SHUT_RDWR)
+                    soc.close()
+                    # **
                 except Exception as e:
                     print(f"LSA send error to {peer['backend_port']}, {e}")
                     pass
@@ -187,7 +195,6 @@ class Content_server():
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
-                    #print(f"Flood message: {message} to {peer['uuid']}" )
                     soc.send(message.encode())
                     soc.shutdown(socket.SHUT_RDWR)
                     soc.close()
@@ -196,13 +203,13 @@ class Content_server():
                     pass
             
         return
-    def dead_adv(self, peers):
+    def dead_adv(self):
         # Advertise death before kill
-        for peer in peers:
+        for peer in self.peers:
             try:
                 soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 soc.connect((peer['host'], int(peer['backend_port'])))
-                message = f"Bye!|{self.name}|{self.uuid}"
+                message = f"Bye!|{self.name}|{self.uuid}|{self.backend_port}|{peer['metric']}"
                 soc.send(message.encode())
                 soc.shutdown(socket.SHUT_RDWR)
                 soc.close()
@@ -210,8 +217,19 @@ class Content_server():
                 print(f"dead_adv, {e}")
                 pass
         return
-    def dead_flood(self, send_time, host, peer):
+    def dead_flood(self, nb_uuid, message):
         # Forward the death message information to other peers
+        for peer in self.peers:
+            if peer['uuid'] != nb_uuid:
+                try:
+                    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    soc.connect((peer['host'], int(peer['backend_port'])))
+                    soc.send(message.encode())
+                    soc.shutdown(socket.SHUT_RDWR)
+                    soc.close()
+                except Exception as e:
+                    print(f"Dead flood send error to {peer['backend_port']}, {e}")
+                    pass
         return
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
@@ -219,18 +237,11 @@ class Content_server():
             for peer in self.peers:
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    soc.settimeout(2)
-                    try:
-                        soc.connect((peer['host'], int(peer['backend_port'])))
-                        message = f"ALIVE|{self.name}|{self.uuid}"
-                        soc.send(message.encode())
-                        soc.shutdown(socket.SHUT_RDWR)
-                        soc.close()
-                    except (socket.timeout, ConnectionRefusedError) as e:
-                        print(f"Keep_alive(self) failed to {peer['backend_port']} {peer['host']}: {e}")
-                    except Exception as e:
-                        print(f"Unexpected keep_alive error: {e}")
-                    # soc.close()
+                    soc.connect((peer['host'], int(peer['backend_port'])))
+                    message = f"ALIVE|{self.name}|{self.uuid}"
+                    soc.send(message.encode())
+                    soc.shutdown(socket.SHUT_RDWR)
+                    soc.close()
                 except Exception as e:
                     print(f"Socket creation error in keep_alive: {e}")
             time.sleep(ALIVE_SGN_INTERVAL)
@@ -286,24 +297,33 @@ class Content_server():
 
             elif msg_string.startswith("Bye!"): # Delete the node if it sends the message before executing kill.
             # otherwise the msg is dropped
-                msg, nb_name, nb_uuid = msg_string.split("|", 2)
+                msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
                 # remove from peers
-                new_peers = []
-                for peer in self.peers:
-                    if peer['uuid'] != nb_uuid:
-                        new_peers.append(peer)
-                self.peers = new_peers
+                remove_peer = {'uuid' : nb_uuid, 
+                                'host' : '127.0.0.1', 
+                                'backend_port' : int(nb_port), 
+                                'metric' : int(nb_metric)}
+                if remove_peer in self.peers:
+                    self.peers.remove(remove_peer)
+                    # name tracking
+                    del self.uuid_to_name[nb_uuid]
+                    del self.name_to_uuid[nb_name]
+                print(f"self.peers after remove: {self.peers}")
 
                 # remove form neighbors and map
                 if nb_name in self.neighbors['neighbors']:
                     del self.neighbors['neighbors'][nb_name]
+                print(f"neighbors: {self.neighbors}")
+                
                 if nb_name in self.map['map']:
                     del self.map['map'][nb_name]
-
                 for node in self.map['map']:
                     if nb_name in self.map['map'][node]:
                         del self.map['map'][node][nb_name]
-                pass
+                print(f"map: {self.map}")
+
+                # self.dead_flood(self.uuid, msg_string)
+
 
             elif msg_string.startswith("Neighbor!"): # Notify that this node is being added to another node and update peer
                 try:
@@ -385,11 +405,9 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
-                print("Shutting down...")
-                self.dead_adv(self.peers)
+                self.dead_adv()
                 self.remain_threads = False
                 self.dl_socket.close()
-                print("Node is dead!")
             elif command == "uuid":
                 # Print UUID
                 print("{\"uuid\": \"" + str(self.uuid) + "\"}")
@@ -405,20 +423,9 @@ class Content_server():
                     print("After.")
                 except Exception as e:
                     print(f"{e}")
-                # print(self.peers)
-                # print(self.neighbors)
-                # print(self.map)
                 pass
             elif command == "map":
                 # # Print Map
-                # map_print = {'map':{}}
-                # for node, neighbors in self.map['map'].items():
-                #     map_print['map'][node] = {}
-                #     for neighbor, metric in neighbors.items():
-                #         name = self.uuid_to_name.get(neighbor, neighbor)
-                #         map_print['map'][node][name] = metric
-                # map = json.dumps(map_print)
-                # print(map)
                 map = json.dumps(self.map)
                 print(map)
             elif command == "rank":
