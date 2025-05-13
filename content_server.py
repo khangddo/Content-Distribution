@@ -65,7 +65,7 @@ class Content_server():
                         backend_port = line.split()[2]  
                         self.backend_port = int(backend_port)
                     elif (line.split()[0] == 'peer_count'):
-                        peer_count = line.split()[2]  
+                        peer_count = line.split()[2]
                         self.peer_count = int(peer_count)
                     else:
                         peer = {'uuid' : line.split()[2][:-1], 
@@ -108,7 +108,7 @@ class Content_server():
         nb_metric = int(metric)
 
         with self.lock:
-            if any(peer['uuid'] == nb_uuid for peer in self.peers):
+            if any(peer['uuid'] == nb_uuid for peer in self.peers_active):
                 print(f"Already neighbor")
                 return
             
@@ -117,30 +117,12 @@ class Content_server():
                     'backend_port' : nb_backend_port, 
                     'metric' : nb_metric}
             
-            # update self in info with new peer
-            self.peers.append(peer)
-            print(f"New self.peers list: {self.peers}")
+            # update self info with new peer
+            # if peer in self.peers_passive:
+            #     self.peers_passive.remove(peer)
 
-            self.map['map'][self.name][nb_uuid] = nb_metric
-            self.neighbors['neighbors'][uuid] = peer
-
-            # if int(peer['backend_port']) == int(self.backend_port):
-            #     return
-            msg = f"Neighbor!|{self.name}|{self.uuid}|{self.backend_port}|{metric}"
-            try:
-                soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                soc.connect((host, int(peer['backend_port'])))
-                soc.send(msg.encode())
-                # **
-                soc.shutdown(socket.SHUT_RDWR)
-                soc.close()
-                # **
-            except Exception as e:
-                print(f"Socket creatrion error: {e}")
-            
-            self.link_state_flood(nb_uuid)
-
-            print("after sending message to new neighbor")
+            self.peers_passive.append(peer)
+            self.known_peers.append(peer)
         #======================================================================
         return
     def link_state_adv(self):
@@ -176,7 +158,7 @@ class Content_server():
                     soc.close()
                     # **
                 except Exception as e:
-                    print(f"LSA send error to {peer['backend_port']}, {e}")
+                    #print(f"LSA send error to {peer['backend_port']}, {e}")
                     pass
             self.link_state_flood('0')
             time.sleep(3)
@@ -197,7 +179,7 @@ class Content_server():
                     soc.shutdown(socket.SHUT_RDWR)
                     soc.close()
                 except Exception as e:
-                    print(f"Flood send error to {peer['backend_port']}, {e}")
+                    #print(f"Flood send error to {peer['backend_port']}, {e}")
                     pass
             
         return
@@ -215,10 +197,10 @@ class Content_server():
                 print(f"dead_adv, {e}")
                 pass
         return
-    def dead_flood(self, nb_uuid, message):
+    def dead_flood(self, message):
         # Forward the death message information to other peers
-        for peer in self.peers:
-            if peer['uuid'] != nb_uuid:
+        for peer in self.peers_active:
+            if peer['uuid'] != self.uuid:
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
@@ -241,7 +223,8 @@ class Content_server():
                     soc.shutdown(socket.SHUT_RDWR)
                     soc.close()
                 except Exception as e:
-                    print(f"Socket creation error in keep_alive: {e}")
+                    break
+                    # print(f"Socket creation error in keep_alive: {e}")
             time.sleep(ALIVE_SGN_INTERVAL)
         return
     ## THIS IS THE RECEIVE FUNCTION THAT IS RECEIVING THE PACKETS
@@ -306,12 +289,14 @@ class Content_server():
             # otherwise the msg is dropped
                 msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
                 # remove from peers
-                remove_peer = {'uuid' : nb_uuid, 
-                                'host' : '127.0.0.1', 
-                                'backend_port' : int(nb_port), 
-                                'metric' : int(nb_metric)}
-                if remove_peer in self.peers:
-                    self.peers.remove(remove_peer)
+                pas_peer = {'uuid' : nb_uuid, 
+                            'host' : '127.0.0.1', 
+                            'backend_port' : int(nb_port), 
+                            'metric' : int(nb_metric)}
+                
+                if pas_peer in self.peers_active:
+                    self.peers_passive.append(pas_peer)
+                    self.peers_active.remove(pas_peer)
                     # name tracking
                     del self.uuid_to_name[nb_uuid]
                     del self.name_to_uuid[nb_name]
@@ -327,36 +312,9 @@ class Content_server():
                 for node in self.map['map']:
                     if nb_name in self.map['map'][node]:
                         del self.map['map'][node][nb_name]
-                # print(f"map: {self.map}")
+                #print(f"map: {self.map}")
 
-                # self.dead_flood(self.uuid, msg_string)
-
-
-            elif msg_string.startswith("Neighbor!"): # Notify that this node is being added to another node and update peer
-                try:
-                    # print("New neighbor!")
-                    msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
-
-                    nb_host = client_address[0]
-
-                    peer = {'uuid' : nb_uuid, 
-                            'host' : nb_host, 
-                            'backend_port' : int(nb_port), 
-                            'metric' : int(nb_metric)}
-                    
-                    with self.lock:
-                        self.peers = [p for p in self.peers if p['uuid'] != nb_uuid]
-                        self.peers.append(peer)
-                        self.map['map'][self.name][nb_name] = peer['metric']
-                        self.neighbors['neighbors'][nb_name] = peer
-                        self.uuid_to_name[nb_uuid] = nb_name
-                        self.name_to_uuid[nb_name] = nb_uuid
-            
-                        #print(f"Added neighbor: {nb_name} ({nb_uuid}) at {nb_host}:{nb_port}")
-
-                except Exception as e:
-                    return
-                    #print(f"Error processing Neighbor message: {e}")
+                self.dead_flood(msg_string)
 
             elif msg_string.startswith("Map!"):
                 msg, nb_map = msg_string.split("|", 1)
