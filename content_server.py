@@ -36,8 +36,11 @@ class Content_server():
         self.backend_port = 0
         self.peer_count = 0
 
-        self.peers = []
+        self.peers_passive = []
+        self.peers_active = []
+        self.known_peers = []
         self.neighbors = {'neighbors': {}}
+        self.rank = {'rank': {}}
         # name tracking
         self.uuid_to_name = {self.uuid: self.name}
         self.name_to_uuid = {self.name: self.uuid}
@@ -59,7 +62,7 @@ class Content_server():
                     elif (line.split()[0] == 'name'):
                         self.name = line.split()[2]
                     elif (line.split()[0] == 'backend_port'):
-                        backend_port= line.split()[2]  
+                        backend_port = line.split()[2]  
                         self.backend_port = int(backend_port)
                     elif (line.split()[0] == 'peer_count'):
                         peer_count = line.split()[2]  
@@ -69,26 +72,21 @@ class Content_server():
                                 'host' : line.split()[3][:-1], 
                                 'backend_port' : int(line.split()[4][:-1]), 
                                 'metric' : int(line.split()[5])}
-                        self.peers.append(peer)
-
+                        self.peers_passive.append(peer)
+            self.known_peers.extend(self.peers_passive)
             # Initialize network map with entries
             self.map = {'map': {self.name : {}}}
             self.link_state[self.name] = {}
             self.link_state_seq[self.name] = 0
-
-            # Update the name mapping and overall map
-            for peer in self.peers:
-                self.uuid_to_name[peer['uuid']] = None
-                self.map['map'][self.name][peer['uuid']] = peer['metric']
 
             # Print out node details
             print("uuid: " + self.uuid)
             print("name: " + self.name)
             print("backend_port: " + str(self.backend_port))
             print("peer_count: " + str(self.peer_count))
-            for i in range(self.peer_count):
-                print(f"peer_{i}: {self.peers[i]['uuid']}, {self.peers[i]['host']}, "
-                    f"{self.peers[i]['backend_port']}, {self.peers[i]['metric']}")
+            for i in range(len(self.peers_active)):
+                print(f"peer_{i}: {self.peers_active[i]['uuid']}, {self.peers_active[i]['host']}, "
+                    f"{self.peers_active[i]['backend_port']}, {self.peers_active[i]['metric']}")
         #======================================================================
             
         # create the receive socket
@@ -168,7 +166,7 @@ class Content_server():
 
             message = f"LSA!|{json.dumps(packet)}"
 
-            for peer in self.peers:
+            for peer in self.peers_active:
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
@@ -190,7 +188,7 @@ class Content_server():
         # send out a message to neighbors that a new node is added
         # send information to neighbors
         message = f"Map!|{json.dumps(self.map)}"
-        for peer in self.peers:
+        for peer in self.peers_active:
             if peer['uuid'] != new_uuid:
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -205,7 +203,7 @@ class Content_server():
         return
     def dead_adv(self):
         # Advertise death before kill
-        for peer in self.peers:
+        for peer in self.peers_active:
             try:
                 soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 soc.connect((peer['host'], int(peer['backend_port'])))
@@ -234,7 +232,7 @@ class Content_server():
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
         while self.remain_threads:
-            for peer in self.peers:
+            for peer in self.known_peers:
                 try:
                     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
@@ -263,19 +261,23 @@ class Content_server():
                 pass
 
             elif msg_string.startswith("ALIVE"): # Update the timeout time if known node, otherwise add new neighbor
+                # all nodes added will go into passive peers until AlIVE messsage is received from that node
                 msg, nb_name, nb_uuid = msg_string.split("|", 2)
-
-                # update name mappings
-                self.uuid_to_name[nb_uuid] = nb_name
-                self.name_to_uuid[nb_name] = nb_uuid
-
-                for peer in self.peers:
-                    if nb_uuid == peer['uuid']:
-                        self.neighbors['neighbors'][nb_name] = peer
+                for pas_peer in self.peers_passive:
+                    if pas_peer['uuid'] == nb_uuid:
+                        # update name mappings
+                        self.uuid_to_name[nb_uuid] = nb_name
+                        self.name_to_uuid[nb_name] = nb_uuid
+                        # udpate active peers
+                        self.peers_active.append(pas_peer)
+                        # update neighbors
+                        self.neighbors['neighbors'][nb_name] = pas_peer
                         # update map with name
-                        if nb_uuid in self.map['map'][self.name]:
-                            del self.map['map'][self.name][nb_uuid]
-                            self.map['map'][self.name][nb_name] = peer['metric']
+                        self.map['map'][self.name][nb_name] = pas_peer['metric']
+                        # update passive peers
+                        self.peers_passive.remove(pas_peer)
+                    break
+
                 self.last_seen[nb_name] = time.time()
 
             elif msg_string.startswith("LSA!"): # Update the map based on new information, drop if old information
@@ -313,26 +315,26 @@ class Content_server():
                     # name tracking
                     del self.uuid_to_name[nb_uuid]
                     del self.name_to_uuid[nb_name]
-                print(f"self.peers after remove: {self.peers}")
+                # print(f"self.peers after remove: {self.peers}")
 
                 # remove form neighbors and map
                 if nb_name in self.neighbors['neighbors']:
                     del self.neighbors['neighbors'][nb_name]
-                print(f"neighbors: {self.neighbors}")
+                # print(f"neighbors: {self.neighbors}")
                 
                 if nb_name in self.map['map']:
                     del self.map['map'][nb_name]
                 for node in self.map['map']:
                     if nb_name in self.map['map'][node]:
                         del self.map['map'][node][nb_name]
-                print(f"map: {self.map}")
+                # print(f"map: {self.map}")
 
                 # self.dead_flood(self.uuid, msg_string)
 
 
             elif msg_string.startswith("Neighbor!"): # Notify that this node is being added to another node and update peer
                 try:
-                    print("New neighbor!")
+                    # print("New neighbor!")
                     msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
 
                     nb_host = client_address[0]
@@ -350,10 +352,11 @@ class Content_server():
                         self.uuid_to_name[nb_uuid] = nb_name
                         self.name_to_uuid[nb_name] = nb_uuid
             
-                        print(f"Added neighbor: {nb_name} ({nb_uuid}) at {nb_host}:{nb_port}")
+                        #print(f"Added neighbor: {nb_name} ({nb_uuid}) at {nb_host}:{nb_port}")
 
                 except Exception as e:
-                    print(f"Error processing Neighbor message: {e}")
+                    return
+                    #print(f"Error processing Neighbor message: {e}")
 
             elif msg_string.startswith("Map!"):
                 msg, nb_map = msg_string.split("|", 1)
@@ -380,7 +383,7 @@ class Content_server():
                     remove_list.append(name)
                     self.peers.remove(peer)
             for name in remove_list:
-                print(f"Timeout: removing neighbor {name}")
+                #print(f"Timeout: removing neighbor {name}")
                 del self.neighbors['neighbors'][name]
                 if name in self.map['map'][self.name]:
                     del self.map['map'][self.name][name]
@@ -406,7 +409,7 @@ class Content_server():
             command = command_line[0]
             if len(command_line) > 1:
                 content = command_line[1:]
-            print("Received command: ", command)
+            # print("Received command: ", command)
             if command == "kill":
                 # Send death message
                 # Kill all threads
@@ -422,19 +425,14 @@ class Content_server():
                 print(neighbors)
             elif command == "addneighbor":
                 # Update Neighbor List with new neighbor
-                try:
-                    print("Before addneighbor definition...")
-                    self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][7:])
-                    print("After.")
-                except Exception as e:
-                    print(f"{e}")
-                pass
+                self.addneighbor(command_line[1][5:], command_line[2][5:], command_line[3][13:], command_line[4][7:])
             elif command == "map":
                 # # Print Map
                 map = json.dumps(self.map)
                 print(map)
             elif command == "rank":
                 # Compute and print the rank
-                print(self.uuid)
+                rank = json.dumps(self.rank)
+                print(rank)
 if __name__ == "__main__":
     content_sever = Content_server(sys.argv[2])
