@@ -78,15 +78,7 @@ class Content_server():
             self.map = {'map': {self.name : {}}}
             self.link_state[self.name] = {}
             self.link_state_seq[self.name] = 0
-
-            # Print out node details
-            print("uuid: " + self.uuid)
-            print("name: " + self.name)
-            print("backend_port: " + str(self.backend_port))
-            print("peer_count: " + str(self.peer_count))
-            for i in range(len(self.peers_active)):
-                print(f"peer_{i}: {self.peers_active[i]['uuid']}, {self.peers_active[i]['host']}, "
-                    f"{self.peers_active[i]['backend_port']}, {self.peers_active[i]['metric']}")
+            
         #======================================================================
             
         # create the receive socket
@@ -149,17 +141,14 @@ class Content_server():
             message = f"LSA!|{json.dumps(packet)}"
 
             for peer in self.peers_active:
+                soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
-                    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
                     soc.send(message.encode())
-                    # **
-                    soc.shutdown(socket.SHUT_RDWR)
                     soc.close()
-                    # **
-                except Exception as e:
-                    #print(f"LSA send error to {peer['backend_port']}, {e}")
+                except socket.error:
                     pass
+
             self.link_state_flood('0')
             time.sleep(3)
         #======================================================================
@@ -172,61 +161,52 @@ class Content_server():
         message = f"Map!|{json.dumps(self.map)}"
         for peer in self.peers_active:
             if peer['uuid'] != new_uuid:
+                soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
-                    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
                     soc.send(message.encode())
-                    soc.shutdown(socket.SHUT_RDWR)
                     soc.close()
-                except Exception as e:
-                    #print(f"Flood send error to {peer['backend_port']}, {e}")
+                except socket.error:
                     pass
             
-        return
     def dead_adv(self):
         # Advertise death before kill
+        message = f"Bye!|{self.name}|{self.uuid}|{self.backend_port}|{peer['metric']}"
         for peer in self.peers_active:
+            soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 soc.connect((peer['host'], int(peer['backend_port'])))
-                message = f"Bye!|{self.name}|{self.uuid}|{self.backend_port}|{peer['metric']}"
                 soc.send(message.encode())
-                soc.shutdown(socket.SHUT_RDWR)
                 soc.close()
-            except Exception as e:
-                print(f"dead_adv, {e}")
+            except socket.error:
                 pass
-        return
+
     def dead_flood(self, message):
         # Forward the death message information to other peers
         for peer in self.peers_active:
             if peer['uuid'] != self.uuid:
+                soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
-                    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
                     soc.send(message.encode())
-                    soc.shutdown(socket.SHUT_RDWR)
                     soc.close()
-                except Exception as e:
-                    print(f"Dead flood send error to {peer['backend_port']}, {e}")
+                except socket.error:
                     pass
-        return
+    
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
+        message = f"ALIVE|{self.name}|{self.uuid}"
         while self.remain_threads:
             for peer in self.known_peers:
+                soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
-                    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     soc.connect((peer['host'], int(peer['backend_port'])))
-                    message = f"ALIVE|{self.name}|{self.uuid}"
                     soc.send(message.encode())
-                    soc.shutdown(socket.SHUT_RDWR)
                     soc.close()
-                except Exception as e:
-                    break
-                    # print(f"Socket creation error in keep_alive: {e}")
+                except socket.error:
+                    pass
             time.sleep(ALIVE_SGN_INTERVAL)
-        return
+
     ## THIS IS THE RECEIVE FUNCTION THAT IS RECEIVING THE PACKETS
     def listen(self):
         self.dl_socket.settimeout(0.1) # for killing the application
