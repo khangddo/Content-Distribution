@@ -89,7 +89,6 @@ class Content_server():
         
         # Initialize link state advertisement that repeats using a neighbor variable
         self.alive()
-        print("Initial setting complete")
         return
     def addneighbor(self, uuid, host, backend_port, metric):
         # Add neighbor code goes here
@@ -112,6 +111,8 @@ class Content_server():
 
                 self.peers_passive.append(peer)
                 self.known_peers.append(peer)
+                
+                self.link_state_flood(self.uuid)
 
         #======================================================================
         return
@@ -122,7 +123,6 @@ class Content_server():
         # 
         # send out a message to neighbors that this node is created
         # making a giant string
-
             my_neighbors = {}
 
             for uuid, data in self.neighbors['neighbors'].items():
@@ -156,7 +156,7 @@ class Content_server():
         #---------------------------------
         # send out a message to neighbors that a new node is added
         # send information to neighbors
-        message = f"Map!|{json.dumps(self.map)}"
+        message = f"Map!|{json.dumps(self.map)}|{new_uuid}"
         for peer in self.peers_active:
             if peer['uuid'] != new_uuid:
                 soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -290,12 +290,11 @@ class Content_server():
                 for node in self.map['map']:
                     if nb_name in self.map['map'][node]:
                         del self.map['map'][node][nb_name]
-                #print(f"map: {self.map}")
 
                 self.dead_flood(msg_string)
 
             elif msg_string.startswith("Map!"):
-                msg, nb_map = msg_string.split("|", 1)
+                msg, nb_map, uuid = msg_string.split("|", 2)
                 map = json.loads(nb_map)
                 #print(f"recieved map from neighbor {map}")
                 for node, neighbors in map['map'].items():
@@ -370,5 +369,12 @@ class Content_server():
                 # Compute and print the rank
                 rank = json.dumps(self.rank)
                 print(rank)
+
+            # testing outputs
+            elif command == "peers":
+                print(f"Known peers: {self.known_peers}")
+                print(f"Passive peers: {self.peers_passive}")
+                print(f"Active peers: {self.peers_active}")
+
 if __name__ == "__main__":
     content_sever = Content_server(sys.argv[2])
