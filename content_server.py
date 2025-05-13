@@ -78,7 +78,7 @@ class Content_server():
             self.map = {'map': {self.name : {}}}
             self.link_state[self.name] = {}
             self.link_state_seq[self.name] = 0
-            
+
         #======================================================================
             
         # create the receive socket
@@ -94,27 +94,25 @@ class Content_server():
     def addneighbor(self, uuid, host, backend_port, metric):
         # Add neighbor code goes here
         #----------------------------------------------------------------------
-        nb_uuid = uuid
-        nb_host = host
-        nb_backend_port = int(backend_port)
-        nb_metric = int(metric)
+        if nb_uuid != self.uuid:
+            nb_uuid = uuid
+            nb_host = host
+            nb_backend_port = int(backend_port)
+            nb_metric = int(metric)
 
-        with self.lock:
-            if any(peer['uuid'] == nb_uuid for peer in self.peers_active):
-                print(f"Already neighbor")
-                return
-            
-            peer = {'uuid' : nb_uuid, 
-                    'host' : nb_host, 
-                    'backend_port' : nb_backend_port, 
-                    'metric' : nb_metric}
-            
-            # update self info with new peer
-            # if peer in self.peers_passive:
-            #     self.peers_passive.remove(peer)
+            with self.lock:
+                if any(peer['uuid'] == nb_uuid for peer in self.peers_active):
+                    print(f"Already neighbor")
+                    return
+                
+                peer = {'uuid' : nb_uuid, 
+                        'host' : nb_host, 
+                        'backend_port' : nb_backend_port, 
+                        'metric' : nb_metric}
 
-            self.peers_passive.append(peer)
-            self.known_peers.append(peer)
+                self.peers_passive.append(peer)
+                self.known_peers.append(peer)
+
         #======================================================================
         return
     def link_state_adv(self):
@@ -171,8 +169,8 @@ class Content_server():
             
     def dead_adv(self):
         # Advertise death before kill
-        message = f"Bye!|{self.name}|{self.uuid}|{self.backend_port}|{peer['metric']}"
         for peer in self.peers_active:
+            message = f"Bye!|{self.name}|{self.uuid}|{self.backend_port}|{peer['metric']}"
             soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
                 soc.connect((peer['host'], int(peer['backend_port'])))
