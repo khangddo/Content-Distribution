@@ -3,7 +3,6 @@ import ast
 import threading, time
 import random
 
-import uuid
 import json
 import time
 
@@ -45,7 +44,7 @@ class Content_server():
         self.uuid_to_name = {self.uuid: self.name}
         self.name_to_uuid = {self.name: self.uuid}
 
-        self.link_state = {} # stores complete network
+        # self.link_state = {} # stores complete network
         self.link_state_seq = {} # trakcs LSA sequence numbers
         self.last_seen = {} # neighbor tracking
         self.lock = threading.Lock()
@@ -76,7 +75,7 @@ class Content_server():
             self.known_peers.extend(self.peers_passive)
             # Initialize network map with entries
             self.map = {'map': {self.name : {}}}
-            self.link_state[self.name] = {}
+            #self.link_state[self.name] = {}
             self.link_state_seq[self.name] = 0
 
         #======================================================================
@@ -327,6 +326,7 @@ class Content_server():
 
     def shortest_path(self):
         # derive the shortest path according to the current link state
+
         rank = {}
         return rank
     def alive(self):
@@ -367,6 +367,7 @@ class Content_server():
                 print(map)
             elif command == "rank":
                 # Compute and print the rank
+                self.rank['rank'] = self.shortest_path()
                 rank = json.dumps(self.rank)
                 print(rank)
 
