@@ -94,7 +94,7 @@ class Content_server():
     def addneighbor(self, uuid, host, backend_port, metric):
         # Add neighbor code goes here
         #----------------------------------------------------------------------
-        if nb_uuid != self.uuid:
+        if uuid != self.uuid:
             nb_uuid = uuid
             nb_host = host
             nb_backend_port = int(backend_port)
