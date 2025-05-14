@@ -322,7 +322,7 @@ class Content_server():
             for name, peer in list(self.neighbors['neighbors'].items()):
                 seen_time = self.last_seen.get(name, 0)
                 if curr_time - seen_time > TIMEOUT_INTERVAL:
-                    #print(f"{name} is dead at {curr_time}")
+                    print(f"{name} is dead at {curr_time}")
                     removed_node.append((name, peer))
                     break
 
@@ -344,6 +344,7 @@ class Content_server():
                     del self.last_seen[nb_name]
                     
                     self.dead_flood(msg_string)
+                    break
             
             time.sleep(ALIVE_SGN_INTERVAL)
 
