@@ -8,7 +8,7 @@ import time
 
 BUFSIZE = 1024 # size of receiving buffer
 ALIVE_SGN_INTERVAL = 0.5 # interval to send alive signal
-TIMEOUT_INTERVAL = 10*ALIVE_SGN_INTERVAL
+TIMEOUT_INTERVAL = 20*ALIVE_SGN_INTERVAL
 UPSTREAM_PORT_NUMBER = 1111 # socket number for UL transmission
 
 ##
