@@ -164,8 +164,7 @@ class Content_server():
                     soc.send(message.encode())
                     soc.close()
                 except socket.error:
-                    pass
-            
+                    pass       
     def dead_adv(self):
         # Advertise death before kill
         for peer in self.peers_active:
@@ -326,8 +325,51 @@ class Content_server():
 
     def shortest_path(self):
         # derive the shortest path according to the current link state
-
+        done = []
+        horizon = []
+        unseen = []
+        table = {}
         rank = {}
+        for node in self.map['map']:
+            unseen.append(node)
+            if node == self.name:
+                table[node] = {'shortest': 0, 'source' : None}
+            else:
+                table[node] = {'shortest': float('Inf'), 'source' : None}
+        source = self.name  
+        while len(unseen) != 0:
+            for node in self.map['map'][source]:
+                if node in unseen:
+                    horizon.append(node)
+            for node in horizon:
+                total = table[source]['shortest'] + self.map['map'][source][node]
+                if total < table[node]['shortest']:
+                    table[node]['shortest'] = total
+                    table[node]['source'] = source
+                else:
+                    pass
+            horizon = []
+            unseen.remove(source)
+            done.append(source)
+
+            # pick a new source
+            min_dis = float('Inf')
+            for node in unseen:
+                if table[node]['shortest'] < min_dis:
+                    min_dis = table[node]['shortest']
+                    source = node
+
+        del table[self.name]
+        min = float('Inf')
+        route = ""
+        while len(table) != 0:
+            for node in table:
+                if table[node]['shortest'] < min:
+                    min = table[node]['shortest']
+                    route = node
+            rank[route] = min
+            del table[route]
+            min = float('Inf')
         return rank
     def alive(self):
         keep_alive = threading.Thread(target=self.keep_alive) # A thread that keeps sending keep_alive messages
