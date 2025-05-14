@@ -100,7 +100,7 @@ class Content_server():
 
             with self.lock:
                 if any(peer['uuid'] == nb_uuid for peer in self.peers_active):
-                    print(f"Already neighbor")
+                    # print(f"Already neighbor")
                     return
                 
                 peer = {'uuid' : nb_uuid, 
@@ -228,11 +228,11 @@ class Content_server():
                         'host' : '127.0.0.1', 
                         'backend_port' : nb_port, 
                         'metric' : nb_metric}
-                print(f"{nb_name}: {alive_peer}")
+                #print(f"{nb_name}: {alive_peer}")
 
                 for pas_peer in self.peers_passive:
                     if pas_peer['uuid'] == nb_uuid:
-                        print(f"{nb_name} is being resurected")
+                        #print(f"{nb_name} is being resurected")
                         # update name mappings
                         self.uuid_to_name[nb_uuid] = nb_name
                         self.name_to_uuid[nb_name] = nb_uuid
@@ -322,7 +322,7 @@ class Content_server():
             for name, peer in list(self.neighbors['neighbors'].items()):
                 seen_time = self.last_seen.get(name, 0)
                 if curr_time - seen_time > TIMEOUT_INTERVAL:
-                    print(f"{name} is dead at {curr_time}")
+                    #print(f"{name} is dead at {curr_time}")
                     removed_node.append((name, peer))
                     break
 
