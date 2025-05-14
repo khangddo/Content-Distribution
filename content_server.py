@@ -191,12 +191,13 @@ class Content_server():
     
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
-        message = f"ALIVE|{self.name}|{self.uuid}"
+        
         while self.remain_threads:
             for peer in self.known_peers:
                 soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
                     soc.connect((peer['host'], int(peer['backend_port'])))
+                    message = f"ALIVE|{self.name}|{self.uuid}|{self.backend_port}|{peer['metric']}"
                     soc.send(message.encode())
                     soc.close()
                 except socket.error:
@@ -221,9 +222,17 @@ class Content_server():
 
             elif msg_string.startswith("ALIVE"): # Update the timeout time if known node, otherwise add new neighbor
                 # all nodes added will go into passive peers until AlIVE messsage is received from that node
-                msg, nb_name, nb_uuid = msg_string.split("|", 2)
+                msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
+
+                alive_peer = {'uuid' : nb_uuid, 
+                        'host' : '127.0.0.1', 
+                        'backend_port' : nb_port, 
+                        'metric' : nb_metric}
+                print(f"{nb_name}: {alive_peer}")
+
                 for pas_peer in self.peers_passive:
                     if pas_peer['uuid'] == nb_uuid:
+                        print(f"{nb_name} is being resurected")
                         # update name mappings
                         self.uuid_to_name[nb_uuid] = nb_name
                         self.name_to_uuid[nb_name] = nb_uuid
@@ -235,7 +244,6 @@ class Content_server():
                         self.map['map'][self.name][nb_name] = pas_peer['metric']
                         # update passive peers
                         self.peers_passive.remove(pas_peer)
-                    break
 
                 self.last_seen[nb_name] = time.time()
 
@@ -309,32 +317,33 @@ class Content_server():
         # drop the neighbors whose information is old
         while self.remain_threads:
             curr_time = time.time()
-            pas_peer = {}
-            nb_name = ""
-            nb_uuid = ""
-            msg_string = ""
+            removed_node = []
 
-            for name, peer in self.neighbors['neighbors'].items():
+            for name, peer in list(self.neighbors['neighbors'].items()):
                 seen_time = self.last_seen.get(name, 0)
                 if curr_time - seen_time > TIMEOUT_INTERVAL:
-                    msg_string = f"Bye!|{name}|{peer['uuid']}|{peer['backend_port']}|{peer['metric']}"
-                    pas_peer = peer
-                    nb_name = name
-                    nb_uuid = peer['uuid']
+                    print(f"{name} is dead at {curr_time}")
+                    removed_node.append((name, peer))
+                    break
 
-            if pas_peer in self.peers_active:
-                self.peers_passive.append(pas_peer)
-                self.peers_active.remove(pas_peer)
-                # name tracking
-                del self.uuid_to_name[nb_uuid]
-                del self.name_to_uuid[nb_name]
-                # print(f"self.peers after remove: {self.peers}")
-                # remove form neighbors and map
-                del self.neighbors['neighbors'][nb_name]
-                # print(f"neighbors: {self.neighbors}")
-                del self.map['map'][nb_name]
-                del self.last_seen[nb_name]
-                self.dead_flood(msg_string)
+            for nb_name, pas_peer in removed_node:
+                nb_uuid = pas_peer['uuid']
+                msg_string = f"Bye!|{nb_name}|{pas_peer['uuid']}|{pas_peer['backend_port']}|{pas_peer['metric']}"
+            
+                if pas_peer in self.peers_active:
+                    self.peers_passive.append(pas_peer)
+                    self.peers_active.remove(pas_peer)
+                    # name tracking
+                    del self.uuid_to_name[nb_uuid]
+                    del self.name_to_uuid[nb_name]
+                    # print(f"self.peers after remove: {self.peers}")
+                    # remove form neighbors and map
+                    del self.neighbors['neighbors'][nb_name]
+                    # print(f"neighbors: {self.neighbors}")
+                    del self.map['map'][nb_name]
+                    del self.last_seen[nb_name]
+                    
+                    self.dead_flood(msg_string)
             
             time.sleep(ALIVE_SGN_INTERVAL)
 
