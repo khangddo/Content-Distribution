@@ -4,6 +4,7 @@ import threading, time
 import random
 
 import json
+import time
 
 BUFSIZE = 1024 # size of receiving buffer
 ALIVE_SGN_INTERVAL = 0.5 # interval to send alive signal
@@ -307,17 +308,33 @@ class Content_server():
     def timeout_old(self):
         # drop the neighbors whose information is old
         while self.remain_threads:
-            curr_time = time.time()
-            dead_name = ""
-            for name, peer in self.neighbors['neighbors'].items():
-                last_seen_time = self.last_seen.get(name, 0)
-                if curr_time - last_seen_time > TIMEOUT_INTERVAL:
-                    self.dead_adv()
-                    dead_name = name
-            if dead_name in self.neighbors['neighbors']:
-                del self.neighbors['neighbors'][dead_name]
-                del self.map['map'][self.name][dead_name]
-                del self.map['map'][dead_name]
+            rn = time.time()
+            for name, pas_peer in self.neighbors['neighbors'].items():
+                l = self.last_seen.get(name, 0)
+                if rn - l > TIMEOUT_INTERVAL:
+                    msg_string = f"Bye!|{name}|{pas_peer['uuid']}|{pas_peer['backend_port']}|{pas_peer['metric']}"
+                
+                    if pas_peer in self.peers_active:
+                        self.peers_passive.append(pas_peer)
+                        self.peers_active.remove(pas_peer)
+                        # name tracking
+                        del self.uuid_to_name[pas_peer['uuid']]
+                        del self.name_to_uuid[name]
+                    # print(f"self.peers after remove: {self.peers}")
+
+                    # remove form neighbors and map
+                    if name in self.neighbors['neighbors']:
+                        del self.neighbors['neighbors'][name]
+                    # print(f"neighbors: {self.neighbors}")
+                    
+                    if name in self.map['map']:
+                        del self.map['map'][name]
+                    for node in self.map['map']:
+                        if name in self.map['map'][node]:
+                            del self.map['map'][node][name]
+
+                    self.dead_flood(msg_string)
+            
             time.sleep(ALIVE_SGN_INTERVAL)
 
     def shortest_path(self):
@@ -375,7 +392,7 @@ class Content_server():
         link_state_adv = threading.Thread(target=self.link_state_adv) # A thread that keeps doing link_state_adv
         keep_alive.start()
         listen.start()
-        timeout_old.start()
+        #timeout_old.start()
         link_state_adv.start()
         while self.remain_threads:
             time.sleep(ALIVE_SGN_INTERVAL) # wait for the network to settle
@@ -387,7 +404,7 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
-                #self.dead_adv()
+                self.dead_adv()
                 self.remain_threads = False
                 self.dl_socket.close()
             elif command == "uuid":
