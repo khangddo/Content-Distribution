@@ -308,33 +308,42 @@ class Content_server():
     def timeout_old(self):
         # drop the neighbors whose information is old
         while self.remain_threads:
-            rn = time.time()
-            for name, pas_peer in self.neighbors['neighbors'].items():
-                l = self.last_seen.get(name, 0)
-                if rn - l > TIMEOUT_INTERVAL:
+            curr_time = time.time()
+            for name, pas_peer in list(self.neighbors['neighbors'].items()):
+                last_seen = self.last_seen.get(name, 0)
+                if curr_time - last_seen > TIMEOUT_INTERVAL:
+                    nb_name = name
+                    nb_uuid = pas_peer['uuid']
+                    nb_port = pas_peer['backend_port']
+                    nb_metric = pas_peer['metric']
                     msg_string = f"Bye!|{name}|{pas_peer['uuid']}|{pas_peer['backend_port']}|{pas_peer['metric']}"
-                
+                    # remove from peers
+                    peer = {'uuid' : nb_uuid, 
+                                'host' : '127.0.0.1', 
+                                'backend_port' : int(nb_port), 
+                                'metric' : int(nb_metric)}
+                    
                     if pas_peer in self.peers_active:
-                        self.peers_passive.append(pas_peer)
-                        self.peers_active.remove(pas_peer)
+                        self.peers_passive.append(peer)
+                        self.peers_active.remove(peer)
                         # name tracking
-                        del self.uuid_to_name[pas_peer['uuid']]
-                        del self.name_to_uuid[name]
+                        del self.uuid_to_name[nb_uuid]
+                        del self.name_to_uuid[nb_name]
                     # print(f"self.peers after remove: {self.peers}")
 
                     # remove form neighbors and map
-                    if name in self.neighbors['neighbors']:
-                        del self.neighbors['neighbors'][name]
+                    if nb_name in self.neighbors['neighbors']:
+                        del self.neighbors['neighbors'][nb_name]
                     # print(f"neighbors: {self.neighbors}")
                     
-                    if name in self.map['map']:
-                        del self.map['map'][name]
+                    if nb_name in self.map['map']:
+                        del self.map['map'][nb_name]
                     for node in self.map['map']:
-                        if name in self.map['map'][node]:
-                            del self.map['map'][node][name]
+                        if nb_name in self.map['map'][node]:
+                            del self.map['map'][node][nb_name]
 
                     self.dead_flood(msg_string)
-            
+
             time.sleep(ALIVE_SGN_INTERVAL)
 
     def shortest_path(self):
@@ -392,7 +401,7 @@ class Content_server():
         link_state_adv = threading.Thread(target=self.link_state_adv) # A thread that keeps doing link_state_adv
         keep_alive.start()
         listen.start()
-        #timeout_old.start()
+        timeout_old.start()
         link_state_adv.start()
         while self.remain_threads:
             time.sleep(ALIVE_SGN_INTERVAL) # wait for the network to settle
@@ -404,7 +413,7 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
-                self.dead_adv()
+                # self.dead_adv()
                 self.remain_threads = False
                 self.dl_socket.close()
             elif command == "uuid":
