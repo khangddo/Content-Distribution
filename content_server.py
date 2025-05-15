@@ -8,7 +8,7 @@ import time
 
 BUFSIZE = 1024 # size of receiving buffer
 ALIVE_SGN_INTERVAL = 0.5 # interval to send alive signal
-TIMEOUT_INTERVAL = 20*ALIVE_SGN_INTERVAL
+TIMEOUT_INTERVAL = 10*ALIVE_SGN_INTERVAL
 UPSTREAM_PORT_NUMBER = 1111 # socket number for UL transmission
 
 ##
@@ -100,7 +100,7 @@ class Content_server():
 
             with self.lock:
                 if any(peer['uuid'] == nb_uuid for peer in self.peers_active):
-                    # print(f"Already neighbor")
+                    print(f"Already neighbor")
                     return
                 
                 peer = {'uuid' : nb_uuid, 
@@ -191,13 +191,12 @@ class Content_server():
     
     def keep_alive(self):
         # Tell that you are alive to all your neighbors, periodically.
-        
+        message = f"ALIVE|{self.name}|{self.uuid}"
         while self.remain_threads:
             for peer in self.known_peers:
                 soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
                     soc.connect((peer['host'], int(peer['backend_port'])))
-                    message = f"ALIVE|{self.name}|{self.uuid}|{self.backend_port}|{peer['metric']}"
                     soc.send(message.encode())
                     soc.close()
                 except socket.error:
@@ -222,17 +221,9 @@ class Content_server():
 
             elif msg_string.startswith("ALIVE"): # Update the timeout time if known node, otherwise add new neighbor
                 # all nodes added will go into passive peers until AlIVE messsage is received from that node
-                msg, nb_name, nb_uuid, nb_port, nb_metric = msg_string.split("|", 4)
-
-                alive_peer = {'uuid' : nb_uuid, 
-                        'host' : '127.0.0.1', 
-                        'backend_port' : nb_port, 
-                        'metric' : nb_metric}
-                #print(f"{nb_name}: {alive_peer}")
-
+                msg, nb_name, nb_uuid = msg_string.split("|", 2)
                 for pas_peer in self.peers_passive:
                     if pas_peer['uuid'] == nb_uuid:
-                        #print(f"{nb_name} is being resurected")
                         # update name mappings
                         self.uuid_to_name[nb_uuid] = nb_name
                         self.name_to_uuid[nb_name] = nb_uuid
@@ -244,6 +235,7 @@ class Content_server():
                         self.map['map'][self.name][nb_name] = pas_peer['metric']
                         # update passive peers
                         self.peers_passive.remove(pas_peer)
+                    break
 
                 self.last_seen[nb_name] = time.time()
 
@@ -316,35 +308,32 @@ class Content_server():
     def timeout_old(self):
         # drop the neighbors whose information is old
         while self.remain_threads:
-            curr_time = time.time()
-            removed_node = []
-
-            for name, peer in list(self.neighbors['neighbors'].items()):
-                seen_time = self.last_seen.get(name, 0)
-                if curr_time - seen_time > TIMEOUT_INTERVAL:
-                    print(f"{name} is dead at {curr_time}")
-                    removed_node.append((name, peer))
-                    break
-
-            for nb_name, pas_peer in removed_node:
-                nb_uuid = pas_peer['uuid']
-                msg_string = f"Bye!|{nb_name}|{pas_peer['uuid']}|{pas_peer['backend_port']}|{pas_peer['metric']}"
-            
-                if pas_peer in self.peers_active:
-                    self.peers_passive.append(pas_peer)
-                    self.peers_active.remove(pas_peer)
-                    # name tracking
-                    del self.uuid_to_name[nb_uuid]
-                    del self.name_to_uuid[nb_name]
+            rn = time.time()
+            for name, pas_peer in self.neighbors['neighbors'].items():
+                l = self.last_seen.get(name, 0)
+                if rn - l > TIMEOUT_INTERVAL:
+                    msg_string = f"Bye!|{name}|{pas_peer['uuid']}|{pas_peer['backend_port']}|{pas_peer['metric']}"
+                
+                    if pas_peer in self.peers_active:
+                        self.peers_passive.append(pas_peer)
+                        self.peers_active.remove(pas_peer)
+                        # name tracking
+                        del self.uuid_to_name[pas_peer['uuid']]
+                        del self.name_to_uuid[name]
                     # print(f"self.peers after remove: {self.peers}")
+
                     # remove form neighbors and map
-                    del self.neighbors['neighbors'][nb_name]
+                    if name in self.neighbors['neighbors']:
+                        del self.neighbors['neighbors'][name]
                     # print(f"neighbors: {self.neighbors}")
-                    del self.map['map'][nb_name]
-                    del self.last_seen[nb_name]
                     
+                    if name in self.map['map']:
+                        del self.map['map'][name]
+                    for node in self.map['map']:
+                        if name in self.map['map'][node]:
+                            del self.map['map'][node][name]
+
                     self.dead_flood(msg_string)
-                    break
             
             time.sleep(ALIVE_SGN_INTERVAL)
 
@@ -403,7 +392,7 @@ class Content_server():
         link_state_adv = threading.Thread(target=self.link_state_adv) # A thread that keeps doing link_state_adv
         keep_alive.start()
         listen.start()
-        timeout_old.start()
+        #timeout_old.start()
         link_state_adv.start()
         while self.remain_threads:
             time.sleep(ALIVE_SGN_INTERVAL) # wait for the network to settle
@@ -415,6 +404,7 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
+                self.dead_adv()
                 self.remain_threads = False
                 self.dl_socket.close()
             elif command == "uuid":
