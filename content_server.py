@@ -1,4 +1,3 @@
-# Content-Distribution
 import socket, sys
 import ast
 import threading, time
@@ -101,7 +100,7 @@ class Content_server():
 
             with self.lock:
                 if any(peer['uuid'] == nb_uuid for peer in self.peers_active):
-                    print(f"Already neighbor")
+                    #print(f"Already neighbor")
                     return
                 
                 peer = {'uuid' : nb_uuid, 
@@ -223,6 +222,7 @@ class Content_server():
             elif msg_string.startswith("ALIVE"): # Update the timeout time if known node, otherwise add new neighbor
                 # all nodes added will go into passive peers until AlIVE messsage is received from that node
                 msg, nb_name, nb_uuid = msg_string.split("|", 2)
+
                 for pas_peer in self.peers_passive:
                     if pas_peer['uuid'] == nb_uuid:
                         # update name mappings
@@ -236,9 +236,9 @@ class Content_server():
                         self.map['map'][self.name][nb_name] = pas_peer['metric']
                         # update passive peers
                         self.peers_passive.remove(pas_peer)
-                    break
 
                 self.last_seen[nb_name] = time.time()
+                #print(f"{nb_name} is alive {self.last_seen[nb_name]}")
 
             elif msg_string.startswith("LSA!"): # Update the map based on new information, drop if old information
             #If new information, also flood to other neighbors
@@ -293,6 +293,7 @@ class Content_server():
                 self.dead_flood(msg_string)
 
             elif msg_string.startswith("Map!"):
+                #print(f"Beginning of map: {time.time()}")
                 msg, nb_map, uuid = msg_string.split("|", 2)
                 map = json.loads(nb_map)
                 #print(f"recieved map from neighbor {map}")
@@ -304,38 +305,56 @@ class Content_server():
 
                         if node not in self.map['map']:
                             self.map['map'][node] = map['map'][node]
+                #print(f"End of map: {time.time()}")
             #----------------------------------
             
     def timeout_old(self):
         # drop the neighbors whose information is old
         while self.remain_threads:
-            rn = time.time()
+            curr_time = time.time()
+            msg_string = ""
             for name, pas_peer in list(self.neighbors['neighbors'].items()):
-                l = self.last_seen.get(name, 0)
-                if rn - l > TIMEOUT_INTERVAL:
+                last_seen = self.last_seen.get(name, 0)
+                duration = curr_time - last_seen
+                #print(f"{name} is last seen {duration} secs ago")
+                if curr_time - last_seen > TIMEOUT_INTERVAL:
+                    #print(f"{name} timed out")
+                    nb_name = name
+                    nb_uuid = pas_peer['uuid']
+                    nb_port = pas_peer['backend_port']
+                    nb_metric = pas_peer['metric']
                     msg_string = f"Bye!|{name}|{pas_peer['uuid']}|{pas_peer['backend_port']}|{pas_peer['metric']}"
-                
+                    # # remove from peers
+                    # peer = {'uuid' : nb_uuid, 
+                    #             'host' : '127.0.0.1', 
+                    #             'backend_port' : int(nb_port), 
+                    #             'metric' : int(nb_metric)}
+                    
                     if pas_peer in self.peers_active:
                         self.peers_passive.append(pas_peer)
                         self.peers_active.remove(pas_peer)
                         # name tracking
-                        del self.uuid_to_name[pas_peer['uuid']]
-                        del self.name_to_uuid[name]
+                        del self.uuid_to_name[nb_uuid]
+                        del self.name_to_uuid[nb_name]
                     # print(f"self.peers after remove: {self.peers}")
 
                     # remove form neighbors and map
-                    if name in self.neighbors['neighbors']:
-                        del self.neighbors['neighbors'][name]
+                    if nb_name in self.neighbors['neighbors']:
+                        del self.neighbors['neighbors'][nb_name]
                     # print(f"neighbors: {self.neighbors}")
                     
-                    if name in self.map['map']:
-                        del self.map['map'][name]
+                    if nb_name in self.map['map']:
+                        del self.map['map'][nb_name]
                     for node in self.map['map']:
-                        if name in self.map['map'][node]:
-                            del self.map['map'][node][name]
+                        if nb_name in self.map['map'][node]:
+                            del self.map['map'][node][nb_name]
 
-                    self.dead_flood(msg_string)
-            
+                    # print(f"Neighbors after killing a node: {self.neighbors}")
+                    # print(f"Active peers after killing a node: {self.peers_active}")
+                    # print(f"Map: {self.map}")
+        if msg_string != "":
+            self.dead_flood(msg_string)
+
             time.sleep(ALIVE_SGN_INTERVAL)
 
     def shortest_path(self):
@@ -405,7 +424,7 @@ class Content_server():
             if command == "kill":
                 # Send death message
                 # Kill all threads
-                #self.dead_adv()
+                # self.dead_adv()
                 self.remain_threads = False
                 self.dl_socket.close()
             elif command == "uuid":
@@ -429,10 +448,10 @@ class Content_server():
                 print(rank)
 
             # testing outputs
-            elif command == "peers":
-                print(f"Known peers: {self.known_peers}")
-                print(f"Passive peers: {self.peers_passive}")
-                print(f"Active peers: {self.peers_active}")
+            # elif command == "peers":
+            #     print(f"Known peers: {self.known_peers}")
+            #     print(f"Passive peers: {self.peers_passive}")
+            #     print(f"Active peers: {self.peers_active}")
 
 if __name__ == "__main__":
     content_sever = Content_server(sys.argv[2])
