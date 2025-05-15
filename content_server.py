@@ -325,6 +325,11 @@ class Content_server():
                     nb_metric = pas_peer['metric']
                     msg_string = f"Bye!|{name}|{pas_peer['uuid']}|{pas_peer['backend_port']}|{pas_peer['metric']}"
                     # # remove from peers
+                    # peer = {'uuid' : nb_uuid, 
+                    #             'host' : '127.0.0.1', 
+                    #             'backend_port' : int(nb_port), 
+                    #             'metric' : int(nb_metric)}
+                    
                     if pas_peer in self.peers_active:
                         self.peers_passive.append(pas_peer)
                         self.peers_active.remove(pas_peer)
@@ -344,7 +349,9 @@ class Content_server():
                         if nb_name in self.map['map'][node]:
                             del self.map['map'][node][nb_name]
 
-                    self.dead_flood(msg_string)
+                    # print(f"Neighbors after killing a node: {self.neighbors}")
+                    # print(f"Active peers after killing a node: {self.peers_active}")
+                    # print(f"Map: {self.map}")
         if msg_string != "":
             self.dead_flood(msg_string)
 
